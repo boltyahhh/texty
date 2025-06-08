@@ -1,22 +1,40 @@
 export interface TranscriptionResult {
   text: string;
-  processingTime?: number;
+  original_text?: string;
+  language: string;
+  language_name?: string;
+  is_south_indian_language?: boolean;
+  confidence: number;
+  processing_time?: number;
+  detected_language_info?: {
+    language: string;
+    confidence: number;
+    all_probabilities: { [key: string]: number };
+  };
 }
 
 export interface SentimentResult {
   sentiment: 'positive' | 'negative' | 'neutral';
-  confidence: {
+  confidence: number;
+  scores: {
     positive: number;
     negative: number;
     neutral: number;
   };
-  processingTime?: number;
+  processing_time?: number;
+  language?: string;
+  language_name?: string;
+  method?: string;
 }
 
-// Updated to match backend response structure
+// Updated to match backend response structure with South Indian language support
 export interface ProcessingResult {
   transcript: string;                    // matches backend
+  original_transcript?: string;          // for South Indian languages
   transcript_confidence: number;         // matches backend
+  language: string;                      // detected/specified language
+  language_name?: string;                // human-readable language name
+  is_south_indian_language?: boolean;    // enhanced support indicator
   sentiment: string;                     // matches backend
   sentiment_confidence: number;          // matches backend
   sentiment_scores: {                    // matches backend
@@ -24,6 +42,41 @@ export interface ProcessingResult {
   };
   processing_time: number;               // matches backend
   totalProcessingTime?: number;          // added by frontend
+  detected_language_info?: {             // language detection details
+    language: string;
+    confidence: number;
+    all_probabilities: { [key: string]: number };
+  };
+  sentiment_method?: string;             // sentiment analysis method used
+}
+
+export interface LanguageDetectionResult {
+  detected_language: string;
+  confidence: number;
+  language_name: string;
+  is_south_indian: boolean;
+  top_languages: { [key: string]: number };
+}
+
+export interface SupportedLanguages {
+  speech_to_text: {
+    all_languages: string[];
+    south_indian_languages: { [key: string]: string };
+    enhanced_support: string[];
+  };
+  sentiment_analysis: {
+    supported_languages: { [key: string]: string };
+    south_indian_languages: { [key: string]: string };
+    multilingual_support: boolean;
+  };
 }
 
 export type ProcessingStatus = 'idle' | 'recording' | 'uploading' | 'processing' | 'success' | 'error';
+
+export interface Language {
+  code: string;
+  name: string;
+  nativeName?: string;
+  flag?: string;
+  enhanced?: boolean;
+}

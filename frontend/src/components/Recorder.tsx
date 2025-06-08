@@ -3,14 +3,17 @@ import { motion } from 'framer-motion';
 import { useReactMediaRecorder } from 'react-media-recorder';
 import { Mic, Square, AlertCircle } from 'lucide-react';
 import AudioVisualizer from './AudioVisualizer';
+import LanguageSelector from './LanguageSelector';
 
 interface RecorderProps {
-  onRecordingComplete: (audioBlob: Blob) => void;
+  onRecordingComplete: (audioBlob: Blob, language?: string, autoDetect?: boolean) => void;
 }
 
 const Recorder: React.FC<RecorderProps> = ({ onRecordingComplete }) => {
   const [recordingTime, setRecordingTime] = useState(0);
   const [timerId, setTimerId] = useState<number | null>(null);
+  const [selectedLanguage, setSelectedLanguage] = useState('auto');
+  const [autoDetect, setAutoDetect] = useState(true);
   
   const {
     status,
@@ -23,7 +26,11 @@ const Recorder: React.FC<RecorderProps> = ({ onRecordingComplete }) => {
     audio: true,
     onStop: (blobUrl, blob) => {
       if (blob) {
-        onRecordingComplete(blob);
+        onRecordingComplete(
+          blob, 
+          selectedLanguage === 'auto' ? undefined : selectedLanguage,
+          autoDetect
+        );
       }
     }
   });
@@ -65,9 +72,17 @@ const Recorder: React.FC<RecorderProps> = ({ onRecordingComplete }) => {
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5 }}
     >
-      <h2 className="text-xl font-semibold text-gray-800 dark:text-white mb-4">
-        Record Audio
-      </h2>
+      <div className="flex justify-between items-center mb-4">
+        <h2 className="text-xl font-semibold text-gray-800 dark:text-white">
+          Record Audio
+        </h2>
+        <LanguageSelector
+          selectedLanguage={selectedLanguage}
+          onLanguageChange={setSelectedLanguage}
+          autoDetect={autoDetect}
+          onAutoDetectChange={setAutoDetect}
+        />
+      </div>
       
       {error && (
         <div className="mb-4 p-3 bg-red-100 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-md text-red-800 dark:text-red-300 flex items-center">
@@ -116,6 +131,21 @@ const Recorder: React.FC<RecorderProps> = ({ onRecordingComplete }) => {
         <div className="mt-4">
           <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">Preview your recording:</p>
           <audio src={mediaBlobUrl} controls className="w-full" />
+        </div>
+      )}
+      
+      {selectedLanguage !== 'auto' && (
+        <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-md">
+          <p className="text-sm text-blue-800 dark:text-blue-300">
+            <span className="font-medium">Language set to:</span> {
+              selectedLanguage === 'ta' ? 'Tamil (தமிழ்)' :
+              selectedLanguage === 'te' ? 'Telugu (తెలుగు)' :
+              selectedLanguage === 'kn' ? 'Kannada (ಕನ್ನಡ)' :
+              selectedLanguage === 'ml' ? 'Malayalam (മലയാളം)' :
+              selectedLanguage === 'hi' ? 'Hindi (हिन्दी)' :
+              selectedLanguage === 'en' ? 'English' : selectedLanguage
+            }
+          </p>
         </div>
       )}
     </motion.div>

@@ -44,6 +44,9 @@ aiofiles==23.2.1
 scikit-learn==1.3.2
 scipy==1.11.4
 
+# Language Processing
+regex==2023.10.3
+
 # Development tools (optional)
 pytest==7.4.3
 black==23.11.0

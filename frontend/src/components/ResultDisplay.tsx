@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { Clock, MessageSquare, BarChart3 } from 'lucide-react';
+import { Clock, MessageSquare, BarChart3, Globe, Zap } from 'lucide-react';
 import { ProcessingResult } from '../types';
 
 interface ResultDisplayProps {
@@ -10,8 +10,18 @@ interface ResultDisplayProps {
 const ResultDisplay: React.FC<ResultDisplayProps> = ({ result }) => {
   if (!result) return null;
 
-  // Destructure from flat structure
-  const { transcript, sentiment, sentiment_scores, totalProcessingTime } = result;
+  const { 
+    transcript, 
+    original_transcript,
+    language,
+    language_name,
+    is_south_indian_language,
+    sentiment, 
+    sentiment_scores, 
+    totalProcessingTime,
+    detected_language_info,
+    sentiment_method
+  } = result;
   
   const getSentimentColor = (sentiment: string) => {
     switch (sentiment) {
@@ -41,6 +51,18 @@ const ResultDisplay: React.FC<ResultDisplayProps> = ({ result }) => {
     return (value * 100).toFixed(1) + '%';
   };
 
+  const getLanguageFlag = (langCode: string) => {
+    const flags: { [key: string]: string } = {
+      'ta': '🇮🇳',
+      'te': '🇮🇳', 
+      'kn': '🇮🇳',
+      'ml': '🇮🇳',
+      'hi': '🇮🇳',
+      'en': '🇺🇸',
+    };
+    return flags[langCode] || '🌐';
+  };
+
   // Split transcription into words for animation
   const words = transcript.split(' ');
 
@@ -61,6 +83,48 @@ const ResultDisplay: React.FC<ResultDisplayProps> = ({ result }) => {
       </h2>
       
       <div className="space-y-6">
+        {/* Language Detection Info */}
+        {(language || detected_language_info) && (
+          <div>
+            <div className="flex items-center mb-2">
+              <Globe size={18} className="mr-2 text-yellow-500" />
+              <h3 className="text-lg font-medium text-gray-700 dark:text-gray-200">
+                Language Detection
+              </h3>
+            </div>
+            <div className="p-4 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center">
+                  <span className="text-2xl mr-3">{getLanguageFlag(language)}</span>
+                  <div>
+                    <p className="font-medium text-gray-800 dark:text-gray-200">
+                      {language_name || language?.toUpperCase()}
+                    </p>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                      Language: {language}
+                    </p>
+                  </div>
+                </div>
+                {is_south_indian_language && (
+                  <div className="flex items-center">
+                    <Zap size={16} className="mr-1 text-green-500" />
+                    <span className="text-sm bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300 px-2 py-1 rounded">
+                      Enhanced Support
+                    </span>
+                  </div>
+                )}
+              </div>
+              {detected_language_info && (
+                <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
+                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                    Detection confidence: {formatConfidence(detected_language_info.confidence)}
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Transcription */}
         <div>
           <div className="flex items-center mb-2">
@@ -83,6 +147,18 @@ const ResultDisplay: React.FC<ResultDisplayProps> = ({ result }) => {
                 </motion.span>
               ))}
             </div>
+            
+            {/* Show original transcript if different (for South Indian languages) */}
+            {original_transcript && original_transcript !== transcript && (
+              <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
+                  Original transcription:
+                </p>
+                <p className="text-sm text-gray-700 dark:text-gray-300 italic">
+                  {original_transcript}
+                </p>
+              </div>
+            )}
           </div>
         </div>
         
@@ -93,6 +169,11 @@ const ResultDisplay: React.FC<ResultDisplayProps> = ({ result }) => {
             <h3 className="text-lg font-medium text-gray-700 dark:text-gray-200">
               Sentiment Analysis
             </h3>
+            {sentiment_method && (
+              <span className="ml-2 text-xs bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 px-2 py-1 rounded">
+                {sentiment_method}
+              </span>
+            )}
           </div>
           
           <div className="flex flex-col md:flex-row md:items-center md:space-x-6 space-y-4 md:space-y-0">

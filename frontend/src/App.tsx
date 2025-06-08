@@ -13,7 +13,7 @@ function App() {
   const [result, setResult] = useState<ProcessingResult | null>(null);
   const [errorMessage, setErrorMessage] = useState<string>('');
 
-  const handleProcessAudio = async (audioFile: File) => {
+  const handleProcessAudio = async (audioFile: File, language?: string, autoDetect?: boolean) => {
     try {
       setProcessingStatus('uploading');
       setResult(null);
@@ -23,7 +23,7 @@ function App() {
       await new Promise(resolve => setTimeout(resolve, 500));
       
       setProcessingStatus('processing');
-      const result = await processAudio(audioFile);
+      const result = await processAudio(audioFile, language, autoDetect);
       
       setResult(result);
       setProcessingStatus('success');
@@ -34,13 +34,13 @@ function App() {
     }
   };
   
-  const handleRecordingComplete = (audioBlob: Blob) => {
+  const handleRecordingComplete = (audioBlob: Blob, language?: string, autoDetect?: boolean) => {
     const file = new File([audioBlob], 'recording.webm', { type: 'audio/webm' });
-    handleProcessAudio(file);
+    handleProcessAudio(file, language, autoDetect);
   };
 
-  const handleFileSelected = (file: File) => {
-    handleProcessAudio(file);
+  const handleFileSelected = (file: File, language?: string, autoDetect?: boolean) => {
+    handleProcessAudio(file, language, autoDetect);
   };
 
   return (
@@ -57,9 +57,19 @@ function App() {
           <h1 className="text-4xl font-bold mb-4 bg-clip-text text-transparent bg-gradient-to-r from-gray-800 to-gray-900 dark:from-gray-100 dark:to-white">
             Voice Insight
           </h1>
-          <p className="text-xl text-gray-600 dark:text-gray-400 max-w-2xl mx-auto">
+          <p className="text-xl text-gray-600 dark:text-gray-400 max-w-2xl mx-auto mb-4">
             Convert speech to text and analyze sentiment with our advanced AI tools
           </p>
+          <div className="flex justify-center items-center space-x-4 text-sm text-gray-500 dark:text-gray-400">
+            <span className="flex items-center">
+              <span className="w-2 h-2 bg-green-500 rounded-full mr-2"></span>
+              Enhanced support for South Indian languages
+            </span>
+            <span className="flex items-center">
+              <span className="w-2 h-2 bg-blue-500 rounded-full mr-2"></span>
+              Auto language detection
+            </span>
+          </div>
         </motion.div>
         
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-12">
@@ -102,7 +112,7 @@ function App() {
       />
       
       <footer className="py-6 text-center text-gray-500 dark:text-gray-400 text-sm">
-        <p>© {new Date().getFullYear()} VoiceInsight. All rights reserved.</p>
+        <p>© {new Date().getFullYear()} VoiceInsight. Enhanced support for Tamil, Telugu, Kannada & Malayalam.</p>
       </footer>
     </div>
   );
