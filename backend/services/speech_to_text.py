@@ -1,7 +1,7 @@
 import whisper
 import time
 import os
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 import torch
 
 class SpeechToTextService:
@@ -21,17 +21,18 @@ class SpeechToTextService:
         try:
             print(f"Loading Whisper model: {self.model_size}")
             self.model = whisper.load_model(self.model_size)
-            print(f"Model loaded successfully!")
+            print("Model loaded successfully!")
         except Exception as e:
             print(f"Error loading Whisper model: {e}")
             raise e
     
-    async def transcribe_audio(self, audio_file_path: str) -> Dict[str, Any]:
+    async def transcribe_audio(self, audio_file_path: str, language_code: Optional[str] = None) -> Dict[str, Any]:
         """
         Transcribe audio file to text
         
         Args:
             audio_file_path: Path to the audio file
+            language_code: Optional language code (e.g., 'ta' for Tamil)
             
         Returns:
             Dictionary containing transcript and metadata
@@ -46,7 +47,7 @@ class SpeechToTextService:
             result = self.model.transcribe(
                 audio_file_path,
                 fp16=torch.cuda.is_available(),  # Use FP16 if CUDA is available
-                language=None,  # Auto-detect language
+                language=language_code,  # Optional language override
                 task="transcribe"
             )
             
@@ -77,11 +78,9 @@ class SpeechToTextService:
         if not segments:
             return 0.5  # Default confidence if no segments
         
-        # Calculate average confidence from all segments
         confidences = []
         for segment in segments:
             if "avg_logprob" in segment:
-                # Convert log probability to confidence (approximate)
                 confidence = min(1.0, max(0.0, (segment["avg_logprob"] + 1.0)))
                 confidences.append(confidence)
         
@@ -94,9 +93,9 @@ class SpeechToTextService:
             "model_loaded": self.model is not None,
             "cuda_available": torch.cuda.is_available(),
             "supported_languages": [
-                "en", "zh", "de", "es", "ru", "ko", "fr", "ja", "pt", "tr", 
+                "en", "zh", "de", "es", "ru", "ko", "fr", "ja", "pt", "tr",
                 "pl", "ca", "nl", "ar", "sv", "it", "id", "hi", "fi", "vi",
-                "he", "uk", "el", "ms", "cs", "ro", "da", "hu", "ta", "no"
+                "he", "uk", "el", "ms", "cs", "ro", "da", "hu", "ta", "te", "kn", "ml", "no"
             ]
         }
     
