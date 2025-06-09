@@ -31,6 +31,14 @@ class SentimentScores(BaseModel):
     negative: float
     neutral: float
 
+class EmotionAnalysis(BaseModel):
+    primary_emotion: str
+    emotion_scores: Dict[str, float]
+    confidence: float
+    category: str  # positive, negative, neutral
+    intensity: str  # low, medium, high
+    top_emotions: Optional[List[Dict[str, Any]]] = None
+
 class SentimentResponse(BaseModel):
     sentiment: str  # "positive", "negative", "neutral"
     confidence: float
@@ -39,6 +47,7 @@ class SentimentResponse(BaseModel):
     language: Optional[str] = None
     language_name: Optional[str] = None
     method: Optional[str] = None
+    emotions: Optional[EmotionAnalysis] = None
 
 class AudioUploadResponse(BaseModel):
     message: str
@@ -59,6 +68,7 @@ class AudioProcessResponse(BaseModel):
     processing_time: float
     detected_language_info: Optional[Dict[str, Any]] = None
     sentiment_method: Optional[str] = None
+    emotions: Optional[EmotionAnalysis] = None
 
 class LanguageDetectionResponse(BaseModel):
     detected_language: str
@@ -96,3 +106,15 @@ class LanguageSupport(BaseModel):
     script: Optional[str] = None
     enhanced_support: bool = False
     confidence_threshold: Optional[float] = None
+
+class EmotionInfo(BaseModel):
+    emotion: str
+    score: float
+    category: str
+    intensity: str
+
+class PreciseEmotionsResponse(BaseModel):
+    supported_emotions: List[str]
+    emotion_categories: Dict[str, List[str]]
+    intensity_levels: List[str]
+    models_loaded: Dict[str, bool]

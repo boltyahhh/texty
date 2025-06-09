@@ -5,11 +5,12 @@ import time
 from typing import Dict, Any, Optional
 import torch
 import re
+from .emotion_analysis import EmotionAnalysisService
 
 class SentimentAnalysisService:
     def __init__(self, method: str = "transformers"):
         """
-        Initialize sentiment analysis service with multi-language support
+        Initialize sentiment analysis service with multi-language support and precise emotions
         
         Args:
             method: "transformers", "textblob", or "vader"
@@ -17,6 +18,7 @@ class SentimentAnalysisService:
         self.method = method
         self.analyzer = None
         self.multilingual_analyzer = None
+        self.emotion_service = EmotionAnalysisService()
         self.south_indian_languages = {
             'ta': 'Tamil',
             'te': 'Telugu', 
@@ -244,14 +246,14 @@ class SentimentAnalysisService:
     
     async def analyze_sentiment(self, text: str, language: Optional[str] = None) -> Dict[str, Any]:
         """
-        Analyze sentiment of the given text with multi-language support
+        Analyze sentiment of the given text with multi-language support and precise emotions
         
         Args:
             text: Text to analyze
             language: Optional language code
             
         Returns:
-            Dictionary containing sentiment analysis results
+            Dictionary containing sentiment analysis results with precise emotions
         """
         if not text or not text.strip():
             return {
@@ -263,7 +265,14 @@ class SentimentAnalysisService:
                     "neutral": 1.0
                 },
                 "processing_time": 0.0,
-                "language": language or "unknown"
+                "language": language or "unknown",
+                "emotions": {
+                    "primary_emotion": "mildness",
+                    "emotion_scores": {},
+                    "confidence": 0.0,
+                    "category": "neutral",
+                    "intensity": "low"
+                }
             }
         
         start_time = time.time()
@@ -273,23 +282,31 @@ class SentimentAnalysisService:
             if not language:
                 language = self._detect_language(text)
             
-            # Choose analysis method based on language
+            # Perform basic sentiment analysis
             if language in self.south_indian_languages:
-                result = self._analyze_south_indian_sentiment(text, language)
+                sentiment_result = self._analyze_south_indian_sentiment(text, language)
             else:
                 # Use standard analysis for English and other languages
                 if self.method == "transformers":
-                    result = self._analyze_with_transformers(text)
+                    sentiment_result = self._analyze_with_transformers(text)
                 elif self.method == "vader":
-                    result = self._analyze_with_vader(text)
+                    sentiment_result = self._analyze_with_vader(text)
                 elif self.method == "textblob":
-                    result = self._analyze_with_textblob(text)
+                    sentiment_result = self._analyze_with_textblob(text)
                 else:
                     raise ValueError(f"Unknown sentiment analysis method: {self.method}")
             
-            result["processing_time"] = time.time() - start_time
-            result["language"] = language
-            result["language_name"] = self.south_indian_languages.get(language, language.upper())
+            # Perform precise emotion analysis
+            emotion_result = await self.emotion_service.analyze_emotions(text, language)
+            
+            # Combine results
+            result = {
+                **sentiment_result,
+                "processing_time": time.time() - start_time,
+                "language": language,
+                "language_name": self.south_indian_languages.get(language, language.upper()),
+                "emotions": emotion_result
+            }
             
             return result
             
@@ -306,7 +323,14 @@ class SentimentAnalysisService:
                 },
                 "processing_time": time.time() - start_time,
                 "language": language or "unknown",
-                "error": str(e)
+                "error": str(e),
+                "emotions": {
+                    "primary_emotion": "mildness",
+                    "emotion_scores": {},
+                    "confidence": 0.0,
+                    "category": "neutral",
+                    "intensity": "low"
+                }
             }
     
     def _normalize_transformer_result(self, result: Dict[str, Any]) -> Dict[str, Any]:
@@ -410,6 +434,8 @@ class SentimentAnalysisService:
     
     def get_analyzer_info(self) -> Dict[str, Any]:
         """Get information about the current analyzer"""
+        emotion_info = self.emotion_service.get_analyzer_info()
+        
         return {
             "method": self.method,
             "analyzer_loaded": self.analyzer is not None,
@@ -417,12 +443,16 @@ class SentimentAnalysisService:
             "supported_south_indian_languages": self.south_indian_languages,
             "supports_confidence": True,
             "supports_scores": True,
+            "emotion_analysis": emotion_info,
             "features": [
                 "Multi-language support",
                 "South Indian language optimization",
                 "Combined analysis methods",
                 "Language detection",
-                "Confidence scoring"
+                "Confidence scoring",
+                "23 precise emotions",
+                "Emotion categorization",
+                "Intensity levels"
             ]
         }
     
@@ -440,3 +470,7 @@ class SentimentAnalysisService:
             "hi": "Hindi",
             "auto": "Auto-detect"
         }
+    
+    def get_supported_emotions(self) -> Dict[str, Dict[str, str]]:
+        """Get list of supported emotions"""
+        return self.emotion_service.get_supported_emotions()

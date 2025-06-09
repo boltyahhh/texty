@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException, UploadFile, File, Query
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
-from models.schemas import AudioProcessResponse, HealthResponse, LanguageDetectionResponse, SupportedLanguagesResponse
+from models.schemas import AudioProcessResponse, HealthResponse, LanguageDetectionResponse, SupportedLanguagesResponse, PreciseEmotionsResponse
 from services.speech_to_text import SpeechToTextService
 from services.sentiment_analysis import SentimentAnalysisService
 from utils.audio_processing import AudioProcessor
@@ -15,8 +15,8 @@ load_dotenv()
 # Create FastAPI app
 app = FastAPI(
     title="Speech-to-Text Sentiment Analysis API",
-    description="API for converting speech to text and analyzing sentiment with South Indian language support",
-    version="2.0.0"
+    description="API for converting speech to text and analyzing sentiment with South Indian language support and precise emotion detection",
+    version="3.0.0"
 )
 
 # CORS setup for frontend access
@@ -49,9 +49,9 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 @app.get("/", response_model=HealthResponse)
 async def root():
     return HealthResponse(
-        message="Speech-to-Text Sentiment Analysis API with South Indian language support is running!",
+        message="Speech-to-Text Sentiment Analysis API with South Indian language support and precise emotion detection is running!",
         status="healthy",
-        version="2.0.0"
+        version="3.0.0"
     )
 
 @app.get("/health", response_model=HealthResponse)
@@ -59,7 +59,7 @@ async def health_check():
     return HealthResponse(
         message="API is healthy",
         status="healthy",
-        version="2.0.0"
+        version="3.0.0"
     )
 
 @app.get("/api/supported-languages")
@@ -80,6 +80,18 @@ async def get_supported_languages():
             "multilingual_support": sentiment_info["multilingual_support"]
         }
     }
+
+@app.get("/api/supported-emotions")
+async def get_supported_emotions():
+    """Get list of all 23 supported precise emotions"""
+    emotion_info = sentiment_service.get_analyzer_info()["emotion_analysis"]
+    
+    return PreciseEmotionsResponse(
+        supported_emotions=emotion_info["supported_emotions"],
+        emotion_categories=emotion_info["emotion_categories"],
+        intensity_levels=emotion_info["intensity_levels"],
+        models_loaded=emotion_info["models_loaded"]
+    )
 
 @app.post("/api/detect-language")
 async def detect_language(audio_file: UploadFile = File(...)):
@@ -166,7 +178,7 @@ async def analyze_sentiment(
     text_data: dict,
     language: Optional[str] = Query(None, description="Language code for better sentiment analysis")
 ):
-    """Analyze sentiment with optional language specification"""
+    """Analyze sentiment with optional language specification and precise emotions"""
     try:
         if "text" not in text_data:
             raise HTTPException(status_code=400, detail="Text field is required")
@@ -185,7 +197,7 @@ async def process_audio_complete(
     language: Optional[str] = Query(None, description="Language code (e.g., 'ta', 'te', 'kn', 'ml', 'en')"),
     auto_detect: bool = Query(True, description="Auto-detect language if not specified")
 ):
-    """Process audio with transcription and sentiment analysis"""
+    """Process audio with transcription and sentiment analysis including precise emotions"""
     try:
         file_path = os.path.join(UPLOAD_DIR, f"temp_{audio_file.filename}")
         with open(file_path, "wb") as buffer:
@@ -208,6 +220,9 @@ async def process_audio_complete(
         
         os.remove(file_path)
 
+        # Extract emotion data for response
+        emotions = sentiment_result.get("emotions", {})
+        
         return AudioProcessResponse(
             transcript=transcript_result["text"],
             original_transcript=transcript_result.get("original_text", transcript_result["text"]),
@@ -220,7 +235,8 @@ async def process_audio_complete(
             sentiment_scores=sentiment_result["scores"],
             processing_time=transcript_result.get("processing_time", 0.0) + sentiment_result.get("processing_time", 0.0),
             detected_language_info=transcript_result.get("detected_language_info"),
-            sentiment_method=sentiment_result.get("method", "unknown")
+            sentiment_method=sentiment_result.get("method", "unknown"),
+            emotions=emotions
         )
     except Exception as e:
         if 'file_path' in locals() and os.path.exists(file_path):

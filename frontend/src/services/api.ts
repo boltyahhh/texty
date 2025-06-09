@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { ProcessingResult } from '../types';
+import { ProcessingResult, SupportedEmotions } from '../types';
 
 // Set the FastAPI backend URL via Vite environment variable or default to your FastAPI server
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
@@ -13,7 +13,7 @@ const api = axios.create({
 });
 
 /**
- * Uploads the audio file and receives transcript + sentiment analysis result
+ * Uploads the audio file and receives transcript + sentiment analysis result with precise emotions
  * @param audioFile Audio file to be processed
  * @param language Optional language code
  * @param autoDetect Whether to auto-detect language
@@ -84,6 +84,48 @@ export const getSupportedLanguages = async () => {
   } catch (error) {
     if (axios.isAxiosError(error)) {
       throw new Error(error.response?.data?.detail || 'Failed to get supported languages');
+    }
+    throw error;
+  }
+};
+
+/**
+ * Get supported emotions
+ * @returns List of supported emotions and categories
+ */
+export const getSupportedEmotions = async (): Promise<SupportedEmotions> => {
+  try {
+    const response = await api.get('/api/supported-emotions');
+    return response.data;
+  } catch (error) {
+    if (axios.isAxiosError(error)) {
+      throw new Error(error.response?.data?.detail || 'Failed to get supported emotions');
+    }
+    throw error;
+  }
+};
+
+/**
+ * Analyze sentiment with precise emotions
+ * @param text Text to analyze
+ * @param language Optional language code
+ * @returns Sentiment and emotion analysis result
+ */
+export const analyzeSentiment = async (text: string, language?: string) => {
+  try {
+    const params = new URLSearchParams();
+    if (language) {
+      params.append('language', language);
+    }
+
+    const response = await api.post(
+      `/api/analyze-sentiment${params.toString() ? '?' + params.toString() : ''}`,
+      { text }
+    );
+    return response.data;
+  } catch (error) {
+    if (axios.isAxiosError(error)) {
+      throw new Error(error.response?.data?.detail || 'Failed to analyze sentiment');
     }
     throw error;
   }

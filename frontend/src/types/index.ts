@@ -27,7 +27,21 @@ export interface SentimentResult {
   method?: string;
 }
 
-// Updated to match backend response structure with South Indian language support
+export interface EmotionAnalysis {
+  primary_emotion: string;
+  emotion_scores: { [key: string]: number };
+  confidence: number;
+  category: string;  // positive, negative, neutral
+  intensity: string; // low, medium, high
+  top_emotions?: Array<{
+    emotion: string;
+    score: number;
+    category: string;
+    intensity: string;
+  }>;
+}
+
+// Updated to match backend response structure with South Indian language support and precise emotions
 export interface ProcessingResult {
   transcript: string;                    // matches backend
   original_transcript?: string;          // for South Indian languages
@@ -48,6 +62,7 @@ export interface ProcessingResult {
     all_probabilities: { [key: string]: number };
   };
   sentiment_method?: string;             // sentiment analysis method used
+  emotions?: EmotionAnalysis;            // precise emotion analysis
 }
 
 export interface LanguageDetectionResult {
@@ -68,6 +83,20 @@ export interface SupportedLanguages {
     supported_languages: { [key: string]: string };
     south_indian_languages: { [key: string]: string };
     multilingual_support: boolean;
+  };
+}
+
+export interface SupportedEmotions {
+  supported_emotions: string[];
+  emotion_categories: {
+    positive: string[];
+    negative: string[];
+    neutral: string[];
+  };
+  intensity_levels: string[];
+  models_loaded: {
+    primary_emotion: boolean;
+    multilingual: boolean;
   };
 }
 

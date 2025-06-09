@@ -2,6 +2,7 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import { Clock, MessageSquare, BarChart3, Globe, Zap } from 'lucide-react';
 import { ProcessingResult } from '../types';
+import EmotionDisplay from './EmotionDisplay';
 
 interface ResultDisplayProps {
   result: ProcessingResult | null;
@@ -20,7 +21,8 @@ const ResultDisplay: React.FC<ResultDisplayProps> = ({ result }) => {
     sentiment_scores, 
     totalProcessingTime,
     detected_language_info,
-    sentiment_method
+    sentiment_method,
+    emotions
   } = result;
   
   const getSentimentColor = (sentiment: string) => {
@@ -162,12 +164,12 @@ const ResultDisplay: React.FC<ResultDisplayProps> = ({ result }) => {
           </div>
         </div>
         
-        {/* Sentiment Analysis */}
+        {/* Basic Sentiment Analysis */}
         <div>
           <div className="flex items-center mb-3">
             <BarChart3 size={18} className="mr-2 text-yellow-500" />
             <h3 className="text-lg font-medium text-gray-700 dark:text-gray-200">
-              Sentiment Analysis
+              Basic Sentiment Analysis
             </h3>
             {sentiment_method && (
               <span className="ml-2 text-xs bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 px-2 py-1 rounded">
@@ -283,13 +285,24 @@ const ResultDisplay: React.FC<ResultDisplayProps> = ({ result }) => {
             </div>
           </div>
         </div>
+
+        {/* Precise Emotion Analysis */}
+        {emotions && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 1.1, duration: 0.5 }}
+          >
+            <EmotionDisplay emotions={emotions} />
+          </motion.div>
+        )}
         
         {/* Processing Time */}
         <motion.div 
           className="flex items-center text-gray-600 dark:text-gray-400 mt-4 text-sm"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          transition={{ delay: 1.2 }}
+          transition={{ delay: 1.4 }}
         >
           <Clock size={16} className="mr-1" />
           <span>
