@@ -109,3 +109,69 @@ export interface Language {
   flag?: string;
   enhanced?: boolean;
 }
+
+// New types for conversational AI
+export interface Message {
+  id: string;
+  type: 'user' | 'ai';
+  content: string;
+  timestamp: Date;
+  audioUrl?: string;
+  processingResult?: ProcessingResult;
+  isTyping?: boolean;
+}
+
+export interface Conversation {
+  id: string;
+  title: string;
+  messages: Message[];
+  createdAt: Date;
+  updatedAt: Date;
+  emotionalSummary?: {
+    dominantEmotion: string;
+    averageSentiment: number;
+    emotionDistribution: { [key: string]: number };
+  };
+}
+
+export interface AIPersonality {
+  id: string;
+  name: string;
+  description: string;
+  systemPrompt: string;
+  icon: string;
+  color: string;
+}
+
+export interface VoiceSettings {
+  enabled: boolean;
+  voice: string;
+  rate: number;
+  pitch: number;
+  volume: number;
+}
+
+export interface UserPreferences {
+  theme: 'light' | 'dark';
+  aiPersonality: string;
+  voiceSettings: VoiceSettings;
+  showEmotionCharts: boolean;
+  autoSpeak: boolean;
+  language: string;
+}
+
+export interface EmotionalInsight {
+  date: string;
+  dominantEmotion: string;
+  sentimentScore: number;
+  conversationCount: number;
+  emotionBreakdown: { [key: string]: number };
+}
+
+export interface WellnessRecommendation {
+  type: 'breathing' | 'affirmation' | 'tip' | 'exercise';
+  title: string;
+  description: string;
+  content: string;
+  triggerEmotions: string[];
+}
