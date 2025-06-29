@@ -1,48 +1,53 @@
 import axios from 'axios'
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_AWS_API_GATEWAY_URL
-const API_KEY = process.env.AWS_API_KEY
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
-const awsApi = axios.create({
+const backendApi = axios.create({
   baseURL: API_BASE_URL,
   headers: {
     'Content-Type': 'multipart/form-data',
-    ...(API_KEY && { 'X-API-Key': API_KEY }),
   },
-  timeout: 30000, // 30 second timeout for Lambda cold starts
+  timeout: 30000,
 })
 
-export interface AWSProcessingResult {
+export interface ProcessingResult {
   transcript: string
   original_transcript?: string
   language: string
   language_name?: string
   is_south_indian_language?: boolean
   sentiment: {
-    label: string
+    sentiment: string
     confidence: number
     scores: Record<string, number>
   }
   emotions: {
-    primary: string
+    primary_emotion: string
     confidence: number
-    scores: Record<string, number>
+    emotion_scores: Record<string, number>
+    category: string
+    intensity: string
+    top_emotions?: Array<{
+      emotion: string
+      score: number
+      category: string
+      intensity: string
+    }>
   }
   processing_time: number
 }
 
-export const processAudioWithAWS = async (
+export const processAudioWithBackend = async (
   audioFile: File, 
   language?: string, 
   autoDetect: boolean = true
-): Promise<AWSProcessingResult> => {
+): Promise<ProcessingResult> => {
   const startTime = Date.now()
 
   try {
     const formData = new FormData()
     formData.append('audio_file', audioFile)
 
-    // Build query parameters
     const params = new URLSearchParams()
     if (language && language !== 'auto') {
       params.append('language', language)
@@ -51,7 +56,7 @@ export const processAudioWithAWS = async (
 
     const url = `/process-audio${params.toString() ? '?' + params.toString() : ''}`
     
-    const response = await awsApi.post(url, formData, {
+    const response = await backendApi.post(url, formData, {
       onUploadProgress: (progressEvent) => {
         if (progressEvent.total) {
           const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total)
@@ -69,20 +74,20 @@ export const processAudioWithAWS = async (
   } catch (error) {
     if (axios.isAxiosError(error)) {
       if (error.code === 'ECONNABORTED') {
-        throw new Error('Request timeout - Lambda function may be experiencing cold start delays')
+        throw new Error('Request timeout - Backend may be processing')
       }
-      throw new Error(error.response?.data?.detail || 'Failed to process audio with AWS Lambda')
+      throw new Error(error.response?.data?.detail || 'Failed to process audio')
     }
     throw error
   }
 }
 
-export const detectLanguageWithAWS = async (audioFile: File) => {
+export const detectLanguageWithBackend = async (audioFile: File) => {
   try {
     const formData = new FormData()
     formData.append('audio_file', audioFile)
 
-    const response = await awsApi.post('/detect-language', formData)
+    const response = await backendApi.post('/api/detect-language', formData)
     return response.data
   } catch (error) {
     if (axios.isAxiosError(error)) {
@@ -92,9 +97,9 @@ export const detectLanguageWithAWS = async (audioFile: File) => {
   }
 }
 
-export const getSupportedLanguagesFromAWS = async () => {
+export const getSupportedLanguages = async () => {
   try {
-    const response = await awsApi.get('/supported-languages')
+    const response = await backendApi.get('/api/supported-languages')
     return response.data
   } catch (error) {
     if (axios.isAxiosError(error)) {
@@ -104,9 +109,9 @@ export const getSupportedLanguagesFromAWS = async () => {
   }
 }
 
-export const getSupportedEmotionsFromAWS = async () => {
+export const getSupportedEmotions = async () => {
   try {
-    const response = await awsApi.get('/supported-emotions')
+    const response = await backendApi.get('/api/supported-emotions')
     return response.data
   } catch (error) {
     if (axios.isAxiosError(error)) {
@@ -116,15 +121,15 @@ export const getSupportedEmotionsFromAWS = async () => {
   }
 }
 
-export const analyzeSentimentWithAWS = async (text: string, language?: string) => {
+export const analyzeSentimentWithBackend = async (text: string, language?: string) => {
   try {
     const params = new URLSearchParams()
     if (language) {
       params.append('language', language)
     }
 
-    const response = await awsApi.post(
-      `/analyze-sentiment${params.toString() ? '?' + params.toString() : ''}`,
+    const response = await backendApi.post(
+      `/api/analyze-sentiment${params.toString() ? '?' + params.toString() : ''}`,
       { text }
     )
     return response.data
@@ -136,9 +141,9 @@ export const analyzeSentimentWithAWS = async (text: string, language?: string) =
   }
 }
 
-export const getModelInfoFromAWS = async () => {
+export const getModelInfo = async () => {
   try {
-    const response = await awsApi.get('/model-info')
+    const response = await backendApi.get('/api/model-info')
     return response.data
   } catch (error) {
     if (axios.isAxiosError(error)) {
@@ -148,14 +153,13 @@ export const getModelInfoFromAWS = async () => {
   }
 }
 
-// Health check for AWS Lambda
-export const checkAWSHealth = async () => {
+export const checkBackendHealth = async () => {
   try {
-    const response = await awsApi.get('/health')
+    const response = await backendApi.get('/health')
     return response.data
   } catch (error) {
     if (axios.isAxiosError(error)) {
-      throw new Error('AWS Lambda backend is not responding')
+      throw new Error('Backend is not responding')
     }
     throw error
   }

@@ -14,17 +14,6 @@ const withPWA = require('next-pwa')({
           maxAgeSeconds: 24 * 60 * 60 // 24 hours
         }
       }
-    },
-    {
-      urlPattern: /^https:\/\/.*\.amazonaws\.com\/.*/i,
-      handler: 'NetworkFirst',
-      options: {
-        cacheName: 'aws-api',
-        expiration: {
-          maxEntries: 64,
-          maxAgeSeconds: 60 * 60 // 1 hour
-        }
-      }
     }
   ]
 });
@@ -36,6 +25,14 @@ const nextConfig = {
   },
   images: {
     domains: ['images.unsplash.com', 'via.placeholder.com'],
+  },
+  async rewrites() {
+    return [
+      {
+        source: '/api/:path*',
+        destination: 'http://localhost:8000/api/:path*',
+      },
+    ];
   },
   async headers() {
     return [

@@ -1,5 +1,5 @@
 {
-  "name": "voiceinsight-ai",
+  "name": "voiceinsight-ai-frontend",
   "version": "1.0.0",
   "private": true,
   "scripts": {
@@ -23,10 +23,8 @@
     "wavesurfer.js": "^7.6.0",
     "zustand": "^4.4.7",
     "react-hot-toast": "^2.4.1",
-    "react-use-websocket": "^4.5.0",
     "workbox-webpack-plugin": "^7.0.0",
     "next-pwa": "^5.6.0",
-    "@vercel/analytics": "^1.1.1",
     "react-speech-recognition": "^3.10.0",
     "react-intersection-observer": "^9.5.3"
   },

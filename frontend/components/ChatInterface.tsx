@@ -2,15 +2,14 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Mic, Send, Square, Upload, Volume2, VolumeX } from 'lucide-react'
+import { Mic, Send, Square, Upload, Volume2, VolumeX, RefreshCw } from 'lucide-react'
 import { useReactMediaRecorder } from 'react-media-recorder'
 import { useConversationStore } from '@/store/conversationStore'
 import { useSettingsStore } from '@/store/settingsStore'
-import { useWebSocket } from '@/hooks/useWebSocket'
 import MessageBubble from './MessageBubble'
 import TypingIndicator from './TypingIndicator'
 import AudioWaveform from './AudioWaveform'
-import { processAudioWithAWS } from '@/services/awsApi'
+import { processAudioWithBackend } from '@/services/backendApi'
 import { generateAIResponse } from '@/services/openaiApi'
 import { speakText, stopSpeaking, isSpeaking } from '@/services/ttsService'
 import toast from 'react-hot-toast'
@@ -20,6 +19,7 @@ export default function ChatInterface() {
   const [isAITyping, setIsAITyping] = useState(false)
   const [recordingTime, setRecordingTime] = useState(0)
   const [dragActive, setDragActive] = useState(false)
+  const [connectionStatus, setConnectionStatus] = useState<'connected' | 'disconnected' | 'error'>('connected')
   
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -27,7 +27,6 @@ export default function ChatInterface() {
 
   const { getCurrentConversation, addMessage, updateMessage } = useConversationStore()
   const { aiPersonality, voiceSettings, autoSpeak } = useSettingsStore()
-  const { sendMessage: sendWebSocketMessage, connectionStatus } = useWebSocket()
 
   const {
     status: recordingStatus,
@@ -92,29 +91,34 @@ export default function ChatInterface() {
     setIsProcessing(true)
     
     try {
-      // Create audio file
       const audioFile = new File([blob], 'recording.webm', { type: 'audio/webm' })
       
-      // Process with AWS Lambda
-      const result = await processAudioWithAWS(audioFile)
+      const result = await processAudioWithBackend(audioFile)
       
-      // Add user message
       const userMessage = addMessage({
         type: 'user',
         content: result.transcript,
         audioUrl: blobUrl,
-        emotions: result.emotions,
-        sentiment: result.sentiment
+        emotions: {
+          primary: result.emotions.primary_emotion,
+          confidence: result.emotions.confidence,
+          scores: result.emotions.emotion_scores
+        },
+        sentiment: {
+          label: result.sentiment.sentiment,
+          confidence: result.sentiment.confidence,
+          scores: result.sentiment.scores
+        }
       })
 
-      // Generate AI response
       await generateAndAddAIResponse(result, userMessage.id)
+      setConnectionStatus('connected')
       
     } catch (error) {
       console.error('Error processing audio:', error)
+      setConnectionStatus('error')
       toast.error('Failed to process audio')
       
-      // Add error message
       addMessage({
         type: 'ai',
         content: "I'm sorry, I had trouble processing your audio. Could you try again?"
@@ -133,20 +137,30 @@ export default function ChatInterface() {
     setIsProcessing(true)
     
     try {
-      const result = await processAudioWithAWS(file)
+      const result = await processAudioWithBackend(file)
       
       const userMessage = addMessage({
         type: 'user',
         content: result.transcript,
         audioUrl: URL.createObjectURL(file),
-        emotions: result.emotions,
-        sentiment: result.sentiment
+        emotions: {
+          primary: result.emotions.primary_emotion,
+          confidence: result.emotions.confidence,
+          scores: result.emotions.emotion_scores
+        },
+        sentiment: {
+          label: result.sentiment.sentiment,
+          confidence: result.sentiment.confidence,
+          scores: result.sentiment.scores
+        }
       })
 
       await generateAndAddAIResponse(result, userMessage.id)
+      setConnectionStatus('connected')
       
     } catch (error) {
       console.error('Error processing file:', error)
+      setConnectionStatus('error')
       toast.error('Failed to process audio file')
     } finally {
       setIsProcessing(false)
@@ -164,40 +178,32 @@ export default function ChatInterface() {
 
       const aiResponse = await generateAIResponse({
         transcript: processingResult.transcript,
-        emotions: processingResult.emotions,
-        sentiment: processingResult.sentiment,
+        emotions: {
+          primary: processingResult.emotions.primary_emotion,
+          confidence: processingResult.emotions.confidence,
+          scores: processingResult.emotions.emotion_scores
+        },
+        sentiment: {
+          label: processingResult.sentiment.sentiment,
+          confidence: processingResult.sentiment.confidence,
+          scores: processingResult.sentiment.scores
+        },
         conversationHistory,
         personality: aiPersonality
       })
 
-      // Add AI message with typing effect
       const aiMessage = addMessage({
         type: 'ai',
         content: aiResponse.content,
         isTyping: true
       })
 
-      // Simulate typing delay
       await new Promise(resolve => setTimeout(resolve, 1000 + aiResponse.content.length * 20))
 
-      // Update message to stop typing
       updateMessage(aiMessage.id, { isTyping: false })
 
-      // Speak the response if auto-speak is enabled
       if (autoSpeak && voiceSettings.enabled) {
-        await speakText(aiResponse.content, voiceSettings, processingResult.emotions?.primary)
-      }
-
-      // Send to WebSocket for real-time updates
-      if (connectionStatus === 'connected') {
-        sendWebSocketMessage({
-          type: 'ai_response',
-          data: {
-            messageId: aiMessage.id,
-            content: aiResponse.content,
-            userMessageId
-          }
-        })
+        await speakText(aiResponse.content, voiceSettings, processingResult.emotions.primary_emotion)
       }
       
     } catch (error) {
@@ -258,6 +264,14 @@ export default function ChatInterface() {
     }
   }
 
+  const getConnectionStatusColor = () => {
+    switch (connectionStatus) {
+      case 'connected': return 'text-green-500'
+      case 'error': return 'text-red-500'
+      default: return 'text-gray-500'
+    }
+  }
+
   return (
     <div className="flex flex-col h-full bg-white dark:bg-gray-900">
       {/* Header */}
@@ -270,19 +284,30 @@ export default function ChatInterface() {
             <h2 className="font-semibold text-gray-900 dark:text-white">
               AI Assistant
             </h2>
-            <p className="text-sm text-gray-500 dark:text-gray-400">
-              {connectionStatus === 'connected' ? 'Online' : 'Offline'}
+            <p className={`text-sm ${getConnectionStatusColor()}`}>
+              {connectionStatus === 'connected' ? 'Online' : 
+               connectionStatus === 'error' ? 'Connection Error' : 'Offline'}
             </p>
           </div>
         </div>
         
-        <button
-          onClick={() => isSpeaking() ? stopSpeaking() : null}
-          disabled={!isSpeaking()}
-          className="p-2 rounded-full bg-gray-100 dark:bg-gray-800 disabled:opacity-50 touch-manipulation"
-        >
-          {isSpeaking() ? <VolumeX size={20} /> : <Volume2 size={20} />}
-        </button>
+        <div className="flex items-center space-x-2">
+          <button
+            onClick={() => isSpeaking() ? stopSpeaking() : null}
+            disabled={!isSpeaking()}
+            className="p-2 rounded-full bg-gray-100 dark:bg-gray-800 disabled:opacity-50 touch-manipulation"
+          >
+            {isSpeaking() ? <VolumeX size={20} /> : <Volume2 size={20} />}
+          </button>
+          
+          <button
+            onClick={() => window.location.reload()}
+            className="p-2 rounded-full bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 touch-manipulation"
+            title="Refresh connection"
+          >
+            <RefreshCw size={20} />
+          </button>
+        </div>
       </div>
 
       {/* Messages */}
@@ -292,7 +317,6 @@ export default function ChatInterface() {
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
       >
-        {/* Drag overlay */}
         <AnimatePresence>
           {dragActive && (
             <motion.div
@@ -311,7 +335,6 @@ export default function ChatInterface() {
           )}
         </AnimatePresence>
 
-        {/* Messages */}
         <AnimatePresence>
           {currentConversation?.messages.map((message) => (
             <MessageBubble
