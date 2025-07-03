@@ -1,31 +1,45 @@
-import { useState, useEffect } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
-import { Brain, TrendingUp, Calendar, BarChart3, PieChart, Activity } from 'lucide-react'
-import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend, ArcElement, LineElement, PointElement } from 'chart.js'
-import { Bar, Pie, Line } from 'react-chartjs-2'
-import { useConversationStore } from '../store/conversationStore'
-import EmotionDisplay from './EmotionDisplay'
+import React from 'react';
+import { motion } from 'framer-motion';
+import { Line, Doughnut, Bar } from 'react-chartjs-2';
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title,
+  Tooltip,
+  Legend,
+  ArcElement,
+  BarElement,
+} from 'chart.js';
+import { EmotionalInsight } from '../types';
 
-ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend, ArcElement, LineElement, PointElement)
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title,
+  Tooltip,
+  Legend,
+  ArcElement,
+  BarElement
+);
 
-export default function EmotionDashboard() {
-  const [timeRange, setTimeRange] = useState<'today' | 'week' | 'month'>('week')
-  const [selectedView, setSelectedView] = useState<'overview' | 'trends' | 'insights'>('overview')
-  
-  const { getEmotionalInsights, getCurrentConversation } = useConversationStore()
-  const currentConversation = getCurrentConversation()
-  
-  const insights = getEmotionalInsights(timeRange === 'today' ? 1 : timeRange === 'week' ? 7 : 30)
-  
-  // Get current conversation emotions
-  const currentEmotions = currentConversation?.messages
-    .filter(msg => msg.type === 'user' && msg.emotions)
-    .map(msg => msg.emotions!)
-  
-  const latestEmotion = currentEmotions?.[currentEmotions.length - 1]
+interface EmotionDashboardProps {
+  insights: EmotionalInsight[];
+  currentEmotion?: string;
+  currentSentiment?: number;
+}
 
-  // Prepare chart data
-  const emotionTrendsData = {
+const EmotionDashboard: React.FC<EmotionDashboardProps> = ({
+  insights,
+  currentEmotion,
+  currentSentiment
+}) => {
+  // Prepare data for mood timeline
+  const timelineData = {
     labels: insights.map(insight => new Date(insight.date).toLocaleDateString()),
     datasets: [
       {
@@ -34,328 +48,225 @@ export default function EmotionDashboard() {
         borderColor: 'rgb(59, 130, 246)',
         backgroundColor: 'rgba(59, 130, 246, 0.1)',
         tension: 0.4,
-      }
-    ]
-  }
+        fill: true,
+      },
+    ],
+  };
+
+  // Prepare data for emotion distribution
+  const emotionCounts: { [key: string]: number } = {};
+  insights.forEach(insight => {
+    Object.entries(insight.emotionBreakdown).forEach(([emotion, count]) => {
+      emotionCounts[emotion] = (emotionCounts[emotion] || 0) + count;
+    });
+  });
 
   const emotionDistributionData = {
-    labels: Object.keys(insights.reduce((acc, insight) => ({ ...acc, ...insight.emotionBreakdown }), {})),
+    labels: Object.keys(emotionCounts),
     datasets: [
       {
-        data: Object.values(insights.reduce((acc, insight) => {
-          Object.entries(insight.emotionBreakdown).forEach(([emotion, count]) => {
-            acc[emotion] = (acc[emotion] || 0) + count
-          })
-          return acc
-        }, {} as Record<string, number>)),
+        data: Object.values(emotionCounts),
         backgroundColor: [
           '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF',
           '#FF9F40', '#FF6384', '#C9CBCF', '#4BC0C0', '#FF6384'
         ],
-      }
-    ]
-  }
+        borderWidth: 2,
+        borderColor: '#fff',
+      },
+    ],
+  };
 
-  const dailyEmotionData = {
+  // Prepare data for daily emotion intensity
+  const dailyIntensityData = {
     labels: insights.map(insight => new Date(insight.date).toLocaleDateString()),
     datasets: [
       {
-        label: 'Conversations',
+        label: 'Conversation Count',
         data: insights.map(insight => insight.conversationCount),
         backgroundColor: 'rgba(34, 197, 94, 0.8)',
-      }
-    ]
-  }
+        borderColor: 'rgb(34, 197, 94)',
+        borderWidth: 1,
+      },
+    ],
+  };
 
-  const getEmotionEmoji = (emotion: string) => {
-    const emojiMap: { [key: string]: string } = {
-      'anxious': '😰', 'angry': '😠', 'sad': '😢', 'happy': '😊',
-      'hate': '😡', 'satisfaction': '😌', 'gratitude': '🙏', 'reproach': '😤',
-      'distress': '😫', 'pride': '😤', 'fear': '😨', 'mildness': '😐',
-      'pity': '😔', 'boredom': '😴', 'shame': '😳', 'disappointment': '😞',
-      'hope': '🤞', 'resentment': '😒', 'love': '❤️', 'gloating': '😏',
-      'anger': '😡', 'relief': '😅', 'admiration': '😍'
-    }
-    return emojiMap[emotion] || '😐'
-  }
+  const chartOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        position: 'top' as const,
+        labels: {
+          color: 'rgb(156, 163, 175)',
+          font: {
+            size: 12,
+          },
+        },
+      },
+    },
+    scales: {
+      x: {
+        ticks: {
+          color: 'rgb(156, 163, 175)',
+        },
+        grid: {
+          color: 'rgba(156, 163, 175, 0.1)',
+        },
+      },
+      y: {
+        ticks: {
+          color: 'rgb(156, 163, 175)',
+        },
+        grid: {
+          color: 'rgba(156, 163, 175, 0.1)',
+        },
+      },
+    },
+  };
 
-  const getWellnessTip = (dominantEmotion: string) => {
-    const tips: { [key: string]: string } = {
-      'anxious': 'Try deep breathing exercises or a short meditation to calm your mind.',
-      'angry': 'Take a moment to step back and practice some grounding techniques.',
-      'sad': 'Remember that it\'s okay to feel sad. Consider reaching out to someone you trust.',
-      'happy': 'Great! Share your positive energy with others around you.',
-      'fear': 'Acknowledge your fear and take small steps to face what worries you.',
-      'love': 'Express your feelings and spread kindness to those around you.',
-      'hope': 'Channel this positive energy into planning and taking action.',
-      'relief': 'Take a moment to appreciate this feeling and what led to it.',
-    }
-    return tips[dominantEmotion] || 'Take time to check in with yourself and practice self-care.'
-  }
+  const doughnutOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        position: 'bottom' as const,
+        labels: {
+          color: 'rgb(156, 163, 175)',
+          font: {
+            size: 11,
+          },
+        },
+      },
+    },
+  };
 
   return (
-    <div className="flex flex-col h-full bg-gray-50 dark:bg-gray-900">
-      {/* Header */}
-      <div className="p-4 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 safe-area-top">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center">
-            <Brain className="w-6 h-6 text-primary-500 mr-2" />
-            <h1 className="text-xl font-bold text-gray-900 dark:text-white">
-              Emotion Dashboard
-            </h1>
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <h2 className="text-2xl font-bold text-gray-800 dark:text-white">Emotion Dashboard</h2>
+        {currentEmotion && (
+          <div className="flex items-center space-x-4">
+            <div className="text-right">
+              <p className="text-sm text-gray-500 dark:text-gray-400">Current Emotion</p>
+              <p className="font-medium text-gray-800 dark:text-white capitalize">{currentEmotion}</p>
+            </div>
+            {currentSentiment !== undefined && (
+              <div className="text-right">
+                <p className="text-sm text-gray-500 dark:text-gray-400">Sentiment</p>
+                <p className={`font-medium ${
+                  currentSentiment > 0.1 ? 'text-green-600' :
+                  currentSentiment < -0.1 ? 'text-red-600' : 'text-blue-600'
+                }`}>
+                  {currentSentiment > 0.1 ? 'Positive' :
+                   currentSentiment < -0.1 ? 'Negative' : 'Neutral'}
+                </p>
+              </div>
+            )}
           </div>
-          
-          <div className="flex bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
-            {(['today', 'week', 'month'] as const).map((range) => (
-              <button
-                key={range}
-                onClick={() => setTimeRange(range)}
-                className={`px-3 py-1 rounded-md text-sm font-medium transition-colors ${
-                  timeRange === range
-                    ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm'
-                    : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'
-                }`}
-              >
-                {range.charAt(0).toUpperCase() + range.slice(1)}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* View Selector */}
-        <div className="flex space-x-2">
-          {(['overview', 'trends', 'insights'] as const).map((view) => (
-            <button
-              key={view}
-              onClick={() => setSelectedView(view)}
-              className={`flex items-center px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                selectedView === view
-                  ? 'bg-primary-100 dark:bg-primary-900/20 text-primary-600 dark:text-primary-400'
-                  : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
-              }`}
-            >
-              {view === 'overview' && <Activity size={16} className="mr-1" />}
-              {view === 'trends' && <TrendingUp size={16} className="mr-1" />}
-              {view === 'insights' && <BarChart3 size={16} className="mr-1" />}
-              {view.charAt(0).toUpperCase() + view.slice(1)}
-            </button>
-          ))}
-        </div>
+        )}
       </div>
 
-      {/* Content */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-6">
-        <AnimatePresence mode="wait">
-          {selectedView === 'overview' && (
-            <motion.div
-              key="overview"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              className="space-y-6"
-            >
-              {/* Current Emotion */}
-              {latestEmotion && (
-                <div className="card">
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-                    Current Emotional State
-                  </h3>
-                  <EmotionDisplay emotions={latestEmotion} />
-                </div>
-              )}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Mood Timeline */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+          className="bg-white/10 dark:bg-black/10 backdrop-blur-lg rounded-lg p-6 border border-white/20 dark:border-gray-800/50"
+        >
+          <h3 className="text-lg font-medium text-gray-800 dark:text-white mb-4">Mood Timeline</h3>
+          <div className="h-64">
+            {insights.length > 0 ? (
+              <Line data={timelineData} options={chartOptions} />
+            ) : (
+              <div className="flex items-center justify-center h-full text-gray-500 dark:text-gray-400">
+                No data available yet
+              </div>
+            )}
+          </div>
+        </motion.div>
 
-              {/* Quick Stats */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="card text-center">
-                  <div className="text-2xl mb-2">
-                    {insights.length > 0 ? getEmotionEmoji(insights[insights.length - 1]?.dominantEmotion) : '😐'}
-                  </div>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">Today's Mood</p>
-                  <p className="font-semibold text-gray-900 dark:text-white capitalize">
-                    {insights[insights.length - 1]?.dominantEmotion || 'Neutral'}
+        {/* Emotion Distribution */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2 }}
+          className="bg-white/10 dark:bg-black/10 backdrop-blur-lg rounded-lg p-6 border border-white/20 dark:border-gray-800/50"
+        >
+          <h3 className="text-lg font-medium text-gray-800 dark:text-white mb-4">Emotion Distribution</h3>
+          <div className="h-64">
+            {Object.keys(emotionCounts).length > 0 ? (
+              <Doughnut data={emotionDistributionData} options={doughnutOptions} />
+            ) : (
+              <div className="flex items-center justify-center h-full text-gray-500 dark:text-gray-400">
+                No emotions detected yet
+              </div>
+            )}
+          </div>
+        </motion.div>
+
+        {/* Daily Activity */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3 }}
+          className="bg-white/10 dark:bg-black/10 backdrop-blur-lg rounded-lg p-6 border border-white/20 dark:border-gray-800/50"
+        >
+          <h3 className="text-lg font-medium text-gray-800 dark:text-white mb-4">Daily Activity</h3>
+          <div className="h-64">
+            {insights.length > 0 ? (
+              <Bar data={dailyIntensityData} options={chartOptions} />
+            ) : (
+              <div className="flex items-center justify-center h-full text-gray-500 dark:text-gray-400">
+                No activity data yet
+              </div>
+            )}
+          </div>
+        </motion.div>
+
+        {/* Emotional Insights */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.4 }}
+          className="bg-white/10 dark:bg-black/10 backdrop-blur-lg rounded-lg p-6 border border-white/20 dark:border-gray-800/50"
+        >
+          <h3 className="text-lg font-medium text-gray-800 dark:text-white mb-4">Recent Insights</h3>
+          <div className="space-y-3">
+            {insights.slice(-5).reverse().map((insight, index) => (
+              <div key={insight.date} className="flex items-center justify-between p-3 bg-white/5 dark:bg-black/5 rounded-lg">
+                <div>
+                  <p className="text-sm font-medium text-gray-800 dark:text-white">
+                    {new Date(insight.date).toLocaleDateString()}
+                  </p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 capitalize">
+                    {insight.dominantEmotion || 'No dominant emotion'}
                   </p>
                 </div>
-
-                <div className="card text-center">
-                  <div className="text-2xl mb-2">📊</div>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">Conversations</p>
-                  <p className="font-semibold text-gray-900 dark:text-white">
-                    {insights.reduce((sum, insight) => sum + insight.conversationCount, 0)}
+                <div className="text-right">
+                  <p className="text-sm font-medium text-gray-800 dark:text-white">
+                    {insight.conversationCount} conversations
                   </p>
-                </div>
-
-                <div className="card text-center">
-                  <div className="text-2xl mb-2">📈</div>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">Avg Sentiment</p>
-                  <p className="font-semibold text-gray-900 dark:text-white">
-                    {insights.length > 0 
-                      ? (insights.reduce((sum, insight) => sum + insight.sentimentScore, 0) / insights.length).toFixed(1)
-                      : '0.0'
-                    }
-                  </p>
-                </div>
-
-                <div className="card text-center">
-                  <div className="text-2xl mb-2">🎯</div>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">Wellness Score</p>
-                  <p className="font-semibold text-gray-900 dark:text-white">
-                    {Math.round(Math.random() * 40 + 60)}%
+                  <p className={`text-xs ${
+                    insight.sentimentScore > 0.1 ? 'text-green-500' :
+                    insight.sentimentScore < -0.1 ? 'text-red-500' : 'text-blue-500'
+                  }`}>
+                    {insight.sentimentScore > 0.1 ? 'Positive' :
+                     insight.sentimentScore < -0.1 ? 'Negative' : 'Neutral'}
                   </p>
                 </div>
               </div>
-
-              {/* Wellness Tip */}
-              {insights.length > 0 && (
-                <div className="card bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20">
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-                    💡 Wellness Tip
-                  </h3>
-                  <p className="text-gray-700 dark:text-gray-300">
-                    {getWellnessTip(insights[insights.length - 1]?.dominantEmotion)}
-                  </p>
-                </div>
-              )}
-            </motion.div>
-          )}
-
-          {selectedView === 'trends' && (
-            <motion.div
-              key="trends"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              className="space-y-6"
-            >
-              {/* Sentiment Trend */}
-              <div className="card">
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-                  Sentiment Trend
-                </h3>
-                <div className="h-64">
-                  <Line 
-                    data={emotionTrendsData} 
-                    options={{
-                      responsive: true,
-                      maintainAspectRatio: false,
-                      plugins: {
-                        legend: { display: false }
-                      },
-                      scales: {
-                        y: { beginAtZero: true, max: 1 }
-                      }
-                    }} 
-                  />
-                </div>
-              </div>
-
-              {/* Daily Activity */}
-              <div className="card">
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-                  Daily Conversations
-                </h3>
-                <div className="h-64">
-                  <Bar 
-                    data={dailyEmotionData} 
-                    options={{
-                      responsive: true,
-                      maintainAspectRatio: false,
-                      plugins: {
-                        legend: { display: false }
-                      }
-                    }} 
-                  />
-                </div>
-              </div>
-            </motion.div>
-          )}
-
-          {selectedView === 'insights' && (
-            <motion.div
-              key="insights"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              className="space-y-6"
-            >
-              {/* Emotion Distribution */}
-              <div className="card">
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-                  Emotion Distribution
-                </h3>
-                <div className="h-64">
-                  <Pie 
-                    data={emotionDistributionData} 
-                    options={{
-                      responsive: true,
-                      maintainAspectRatio: false,
-                      plugins: {
-                        legend: { position: 'bottom' }
-                      }
-                    }} 
-                  />
-                </div>
-              </div>
-
-              {/* Insights List */}
-              <div className="card">
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-                  Key Insights
-                </h3>
-                <div className="space-y-3">
-                  <div className="flex items-center p-3 bg-green-50 dark:bg-green-900/20 rounded-lg">
-                    <div className="text-green-500 mr-3">✨</div>
-                    <div>
-                      <p className="font-medium text-green-800 dark:text-green-200">
-                        Most frequent emotion: {Object.entries(
-                          insights.reduce((acc, insight) => {
-                            Object.entries(insight.emotionBreakdown).forEach(([emotion, count]) => {
-                              acc[emotion] = (acc[emotion] || 0) + count
-                            })
-                            return acc
-                          }, {} as Record<string, number>)
-                        ).sort(([,a], [,b]) => b - a)[0]?.[0] || 'None'}
-                      </p>
-                      <p className="text-sm text-green-600 dark:text-green-300">
-                        This shows your dominant emotional pattern
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-                    <div className="text-blue-500 mr-3">📈</div>
-                    <div>
-                      <p className="font-medium text-blue-800 dark:text-blue-200">
-                        Average sentiment: {insights.length > 0 
-                          ? (insights.reduce((sum, insight) => sum + insight.sentimentScore, 0) / insights.length).toFixed(2)
-                          : '0.00'
-                        }
-                      </p>
-                      <p className="text-sm text-blue-600 dark:text-blue-300">
-                        {insights.length > 0 && insights.reduce((sum, insight) => sum + insight.sentimentScore, 0) / insights.length > 0
-                          ? 'Your overall mood has been positive'
-                          : 'Consider focusing on positive activities'
-                        }
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center p-3 bg-purple-50 dark:bg-purple-900/20 rounded-lg">
-                    <div className="text-purple-500 mr-3">🎯</div>
-                    <div>
-                      <p className="font-medium text-purple-800 dark:text-purple-200">
-                        Total conversations: {insights.reduce((sum, insight) => sum + insight.conversationCount, 0)}
-                      </p>
-                      <p className="text-sm text-purple-600 dark:text-purple-300">
-                        Regular check-ins help track emotional patterns
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+            ))}
+            {insights.length === 0 && (
+              <p className="text-gray-500 dark:text-gray-400 text-center py-4">
+                Start a conversation to see insights
+              </p>
+            )}
+          </div>
+        </motion.div>
       </div>
     </div>
-  )
-}
+  );
+};
+
+export default EmotionDashboard;

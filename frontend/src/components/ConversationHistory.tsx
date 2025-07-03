@@ -1,286 +1,154 @@
-import { useState } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
-import { Search, Download, Trash2, MessageCircle, Calendar, Filter } from 'lucide-react'
-import { useConversationStore } from '../store/conversationStore'
-import { format } from 'date-fns'
+import React from 'react';
+import { motion } from 'framer-motion';
+import { MessageCircle, Calendar, Trash2, Download } from 'lucide-react';
+import { Conversation } from '../types';
+import { conversationManager } from '../services/conversationManager';
 
-export default function ConversationHistory() {
-  const [searchTerm, setSearchTerm] = useState('')
-  const [filterBy, setFilterBy] = useState<'all' | 'positive' | 'negative' | 'neutral'>('all')
-  const [sortBy, setSortBy] = useState<'date' | 'length' | 'emotion'>('date')
-  
-  const { 
-    conversations, 
-    setCurrentConversation, 
-    deleteConversation, 
-    exportConversation,
-    getCurrentConversation 
-  } = useConversationStore()
+interface ConversationHistoryProps {
+  conversations: Conversation[];
+  currentConversationId?: string;
+  onConversationSelect: (conversation: Conversation) => void;
+  onConversationDelete: (conversationId: string) => void;
+}
 
-  const currentConversation = getCurrentConversation()
+const ConversationHistory: React.FC<ConversationHistoryProps> = ({
+  conversations,
+  currentConversationId,
+  onConversationSelect,
+  onConversationDelete
+}) => {
+  const handleExport = (conversation: Conversation, event: React.MouseEvent) => {
+    event.stopPropagation();
+    
+    const exportData = conversationManager.exportConversation(conversation.id);
+    const blob = new Blob([exportData], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `conversation-${conversation.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
 
-  const filteredConversations = conversations
-    .filter(conv => {
-      const matchesSearch = conv.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        conv.messages.some(msg => msg.content.toLowerCase().includes(searchTerm.toLowerCase()))
-      
-      if (!matchesSearch) return false
-      
-      if (filterBy === 'all') return true
-      
-      const avgSentiment = conv.emotionalSummary?.averageSentiment || 0
-      if (filterBy === 'positive') return avgSentiment > 0.1
-      if (filterBy === 'negative') return avgSentiment < -0.1
-      if (filterBy === 'neutral') return Math.abs(avgSentiment) <= 0.1
-      
-      return true
-    })
-    .sort((a, b) => {
-      switch (sortBy) {
-        case 'date':
-          return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
-        case 'length':
-          return b.messages.length - a.messages.length
-        case 'emotion':
-          return (b.emotionalSummary?.averageSentiment || 0) - (a.emotionalSummary?.averageSentiment || 0)
-        default:
-          return 0
-      }
-    })
-
-  const handleExport = (conversationId: string) => {
-    const data = exportConversation(conversationId)
-    const blob = new Blob([data], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `conversation-${conversationId}.json`
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    URL.revokeObjectURL(url)
-  }
-
-  const getEmotionEmoji = (emotion: string) => {
-    const emojiMap: { [key: string]: string } = {
-      'anxious': '😰', 'angry': '😠', 'sad': '😢', 'happy': '😊',
-      'hate': '😡', 'satisfaction': '😌', 'gratitude': '🙏', 'reproach': '😤',
-      'distress': '😫', 'pride': '😤', 'fear': '😨', 'mildness': '😐',
-      'pity': '😔', 'boredom': '😴', 'shame': '😳', 'disappointment': '😞',
-      'hope': '🤞', 'resentment': '😒', 'love': '❤️', 'gloating': '😏',
-      'anger': '😡', 'relief': '😅', 'admiration': '😍'
+  const handleDelete = (conversationId: string, event: React.MouseEvent) => {
+    event.stopPropagation();
+    
+    if (window.confirm('Are you sure you want to delete this conversation?')) {
+      onConversationDelete(conversationId);
     }
-    return emojiMap[emotion] || '😐'
-  }
+  };
 
-  const getSentimentColor = (sentiment: number) => {
-    if (sentiment > 0.1) return 'text-green-500'
-    if (sentiment < -0.1) return 'text-red-500'
-    return 'text-blue-500'
-  }
-
-  const getSentimentBg = (sentiment: number) => {
-    if (sentiment > 0.1) return 'bg-green-50 dark:bg-green-900/20'
-    if (sentiment < -0.1) return 'bg-red-50 dark:bg-red-900/20'
-    return 'bg-blue-50 dark:bg-blue-900/20'
-  }
+  const getEmotionEmoji = (emotion?: string) => {
+    const emojiMap: { [key: string]: string } = {
+      happy: '😊',
+      sad: '😢',
+      angry: '😠',
+      anxious: '😰',
+      fear: '😨',
+      love: '❤️',
+      pride: '😤',
+      relief: '😅'
+    };
+    return emotion ? emojiMap[emotion] || '😐' : '😐';
+  };
 
   return (
-    <div className="flex flex-col h-full bg-gray-50 dark:bg-gray-900">
-      {/* Header */}
-      <div className="p-4 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 safe-area-top">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center">
-            <MessageCircle className="w-6 h-6 text-primary-500 mr-2" />
-            <h1 className="text-xl font-bold text-gray-900 dark:text-white">
-              Conversation History
-            </h1>
-          </div>
-          <span className="text-sm text-gray-500 dark:text-gray-400">
-            {conversations.length} conversations
-          </span>
-        </div>
-
-        {/* Search and Filters */}
-        <div className="space-y-3">
-          {/* Search */}
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
-            <input
-              type="text"
-              placeholder="Search conversations..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="input-field pl-10"
-            />
-          </div>
-
-          {/* Filters */}
-          <div className="flex space-x-2 overflow-x-auto">
-            <select
-              value={filterBy}
-              onChange={(e) => setFilterBy(e.target.value as any)}
-              className="px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-sm"
-            >
-              <option value="all">All Moods</option>
-              <option value="positive">Positive</option>
-              <option value="negative">Negative</option>
-              <option value="neutral">Neutral</option>
-            </select>
-
-            <select
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value as any)}
-              className="px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-sm"
-            >
-              <option value="date">Sort by Date</option>
-              <option value="length">Sort by Length</option>
-              <option value="emotion">Sort by Emotion</option>
-            </select>
-          </div>
-        </div>
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h2 className="text-2xl font-bold text-gray-800 dark:text-white">Conversation History</h2>
+        <span className="text-sm text-gray-500 dark:text-gray-400">
+          {conversations.length} conversations
+        </span>
       </div>
 
-      {/* Conversation List */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-3">
-        <AnimatePresence>
-          {filteredConversations.map((conversation) => (
-            <motion.div
-              key={conversation.id}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              className={`card cursor-pointer transition-all hover:shadow-lg ${
-                currentConversation?.id === conversation.id 
-                  ? 'ring-2 ring-primary-500 bg-primary-50 dark:bg-primary-900/20' 
-                  : ''
-              }`}
-              onClick={() => setCurrentConversation(conversation.id)}
-            >
-              <div className="flex items-start justify-between">
-                <div className="flex-1 min-w-0">
-                  {/* Title and Date */}
-                  <div className="flex items-center justify-between mb-2">
-                    <h3 className="font-semibold text-gray-900 dark:text-white truncate">
-                      {conversation.title}
-                    </h3>
-                    <span className="text-xs text-gray-500 dark:text-gray-400 ml-2">
-                      {format(new Date(conversation.updatedAt), 'MMM d, HH:mm')}
+      <div className="space-y-3">
+        {conversations.map((conversation, index) => (
+          <motion.div
+            key={conversation.id}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: index * 0.05 }}
+            className={`p-4 rounded-lg border cursor-pointer transition-all hover:shadow-md ${
+              currentConversationId === conversation.id
+                ? 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800'
+                : 'bg-white/10 dark:bg-black/10 border-white/20 dark:border-gray-800/50 hover:bg-white/20 dark:hover:bg-black/20'
+            }`}
+            onClick={() => onConversationSelect(conversation)}
+          >
+            <div className="flex items-start justify-between">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center mb-2">
+                  <MessageCircle size={16} className="text-gray-500 dark:text-gray-400 mr-2 flex-shrink-0" />
+                  <h3 className="font-medium text-gray-800 dark:text-white truncate">
+                    {conversation.title}
+                  </h3>
+                  {conversation.emotionalSummary && (
+                    <span className="ml-2 text-lg">
+                      {getEmotionEmoji(conversation.emotionalSummary.dominantEmotion)}
+                    </span>
+                  )}
+                </div>
+                
+                <div className="flex items-center text-sm text-gray-500 dark:text-gray-400 mb-2">
+                  <Calendar size={14} className="mr-1" />
+                  <span>{conversation.updatedAt.toLocaleDateString()}</span>
+                  <span className="mx-2">•</span>
+                  <span>{conversation.messages.length} messages</span>
+                </div>
+
+                {conversation.emotionalSummary && (
+                  <div className="flex items-center space-x-4 text-xs">
+                    <span className="capitalize">
+                      Dominant: {conversation.emotionalSummary.dominantEmotion}
+                    </span>
+                    <span className={`${
+                      conversation.emotionalSummary.averageSentiment > 0.1 ? 'text-green-500' :
+                      conversation.emotionalSummary.averageSentiment < -0.1 ? 'text-red-500' : 'text-blue-500'
+                    }`}>
+                      {conversation.emotionalSummary.averageSentiment > 0.1 ? 'Positive' :
+                       conversation.emotionalSummary.averageSentiment < -0.1 ? 'Negative' : 'Neutral'}
                     </span>
                   </div>
-
-                  {/* Preview */}
-                  <p className="text-sm text-gray-600 dark:text-gray-400 line-clamp-2 mb-3">
-                    {conversation.messages[0]?.content || 'No messages yet'}
-                  </p>
-
-                  {/* Stats */}
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-4 text-xs text-gray-500 dark:text-gray-400">
-                      <span className="flex items-center">
-                        <MessageCircle size={14} className="mr-1" />
-                        {conversation.messages.length} messages
-                      </span>
-                      
-                      {conversation.emotionalSummary && (
-                        <>
-                          <span className="flex items-center">
-                            <span className="mr-1">
-                              {getEmotionEmoji(conversation.emotionalSummary.dominantEmotion)}
-                            </span>
-                            {conversation.emotionalSummary.dominantEmotion}
-                          </span>
-                          
-                          <span className={`flex items-center ${getSentimentColor(conversation.emotionalSummary.averageSentiment)}`}>
-                            <span className="mr-1">📊</span>
-                            {conversation.emotionalSummary.averageSentiment > 0 ? '+' : ''}
-                            {conversation.emotionalSummary.averageSentiment.toFixed(2)}
-                          </span>
-                        </>
-                      )}
-                    </div>
-
-                    {/* Actions */}
-                    <div className="flex items-center space-x-2">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          handleExport(conversation.id)
-                        }}
-                        className="p-1 text-gray-400 hover:text-blue-500 transition-colors"
-                        title="Export conversation"
-                      >
-                        <Download size={16} />
-                      </button>
-                      
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          if (confirm('Are you sure you want to delete this conversation?')) {
-                            deleteConversation(conversation.id)
-                          }
-                        }}
-                        className="p-1 text-gray-400 hover:text-red-500 transition-colors"
-                        title="Delete conversation"
-                      >
-                        <Trash2 size={16} />
-                      </button>
-                    </div>
-                  </div>
-                </div>
+                )}
               </div>
 
-              {/* Emotional Summary Bar */}
-              {conversation.emotionalSummary && (
-                <div className={`mt-3 p-2 rounded-lg ${getSentimentBg(conversation.emotionalSummary.averageSentiment)}`}>
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="font-medium">Emotional Journey</span>
-                    <span className="text-gray-600 dark:text-gray-400">
-                      {Object.keys(conversation.emotionalSummary.emotionDistribution).length} emotions detected
-                    </span>
-                  </div>
-                  
-                  {/* Emotion Distribution */}
-                  <div className="flex mt-2 space-x-1">
-                    {Object.entries(conversation.emotionalSummary.emotionDistribution)
-                      .sort(([,a], [,b]) => b - a)
-                      .slice(0, 5)
-                      .map(([emotion, count]) => (
-                        <div
-                          key={emotion}
-                          className="flex-1 h-2 bg-gray-200 dark:bg-gray-600 rounded-full overflow-hidden"
-                          title={`${emotion}: ${count}`}
-                        >
-                          <div
-                            className="h-full bg-gradient-to-r from-primary-400 to-secondary-400"
-                            style={{ 
-                              width: `${(count / Math.max(...Object.values(conversation.emotionalSummary.emotionDistribution))) * 100}%` 
-                            }}
-                          />
-                        </div>
-                      ))}
-                  </div>
-                </div>
-              )}
-            </motion.div>
-          ))}
-        </AnimatePresence>
+              <div className="flex items-center space-x-2 ml-4">
+                <button
+                  onClick={(e) => handleExport(conversation, e)}
+                  className="p-2 rounded-lg bg-white/10 dark:bg-black/10 hover:bg-white/20 dark:hover:bg-black/20 transition-colors"
+                  title="Export conversation"
+                >
+                  <Download size={14} />
+                </button>
+                <button
+                  onClick={(e) => handleDelete(conversation.id, e)}
+                  className="p-2 rounded-lg bg-white/10 dark:bg-black/10 hover:bg-red-500/20 transition-colors text-red-500"
+                  title="Delete conversation"
+                >
+                  <Trash2 size={14} />
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        ))}
 
-        {filteredConversations.length === 0 && (
+        {conversations.length === 0 && (
           <div className="text-center py-12">
-            <MessageCircle className="w-16 h-16 mx-auto mb-4 text-gray-300 dark:text-gray-600" />
-            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
-              {searchTerm ? 'No conversations found' : 'No conversations yet'}
+            <MessageCircle size={48} className="mx-auto text-gray-400 dark:text-gray-600 mb-4" />
+            <h3 className="text-lg font-medium text-gray-800 dark:text-white mb-2">
+              No conversations yet
             </h3>
             <p className="text-gray-500 dark:text-gray-400">
-              {searchTerm 
-                ? 'Try adjusting your search or filters' 
-                : 'Start a conversation to see your history here'
-              }
+              Start a conversation to see your history here
             </p>
           </div>
         )}
       </div>
     </div>
-  )
-}
+  );
+};
+
+export default ConversationHistory;

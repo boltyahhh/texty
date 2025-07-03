@@ -1,398 +1,345 @@
-import { useState, useRef, useEffect } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
-import { Mic, Send, Square, Upload, Volume2, VolumeX, RefreshCw } from 'lucide-react'
-import { useReactMediaRecorder } from 'react-media-recorder'
-import { useConversationStore } from '../store/conversationStore'
-import { useSettingsStore } from '../store/settingsStore'
-import MessageBubble from './MessageBubble'
-import TypingIndicator from './TypingIndicator'
-import AudioWaveform from './AudioWaveform'
-import { processAudioWithBackend } from '../services/backendApi'
-import { generateAIResponse } from '../services/openaiApi'
-import { speakText, stopSpeaking, isSpeaking } from '../services/ttsService'
-import toast from 'react-hot-toast'
+import React, { useState, useRef, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Send, Mic, Square, Volume2, VolumeX, Download, Trash2 } from 'lucide-react';
+import { useReactMediaRecorder } from 'react-media-recorder';
+import { Message, ProcessingResult, AIPersonality } from '../types';
+import { processAudio } from '../services/api';
+import { generateAIResponse } from '../services/openai';
+import { ttsService } from '../services/textToSpeech';
+import { conversationManager } from '../services/conversationManager';
+import MessageBubble from './MessageBubble';
+import TypingIndicator from './TypingIndicator';
+import AudioVisualizer from './AudioVisualizer';
 
-export default function ChatInterface() {
-  const [isProcessing, setIsProcessing] = useState(false)
-  const [isAITyping, setIsAITyping] = useState(false)
-  const [recordingTime, setRecordingTime] = useState(0)
-  const [dragActive, setDragActive] = useState(false)
-  const [connectionStatus, setConnectionStatus] = useState<'connected' | 'disconnected' | 'error'>('connected')
-  
-  const messagesEndRef = useRef<HTMLDivElement>(null)
-  const fileInputRef = useRef<HTMLInputElement>(null)
-  const recordingTimerRef = useRef<NodeJS.Timeout>()
+interface ChatInterfaceProps {
+  personality: AIPersonality;
+  autoSpeak: boolean;
+  voiceSettings: any;
+  onNewMessage?: (message: Message) => void;
+}
 
-  const { getCurrentConversation, addMessage, updateMessage } = useConversationStore()
-  const { aiPersonality, voiceSettings, autoSpeak } = useSettingsStore()
+const ChatInterface: React.FC<ChatInterfaceProps> = ({
+  personality,
+  autoSpeak,
+  voiceSettings,
+  onNewMessage
+}) => {
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [isAITyping, setIsAITyping] = useState(false);
+  const [recordingTime, setRecordingTime] = useState(0);
+  const [timerId, setTimerId] = useState<number | null>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const {
-    status: recordingStatus,
+    status,
     startRecording,
     stopRecording,
     mediaBlobUrl,
     clearBlobUrl
   } = useReactMediaRecorder({
     audio: true,
-    onStop: handleRecordingComplete
-  })
-
-  const isRecording = recordingStatus === 'recording'
-  const currentConversation = getCurrentConversation()
-
-  useEffect(() => {
-    scrollToBottom()
-  }, [currentConversation?.messages, isAITyping])
-
-  useEffect(() => {
-    if (isRecording) {
-      setRecordingTime(0)
-      recordingTimerRef.current = setInterval(() => {
-        setRecordingTime(prev => prev + 1)
-      }, 1000)
-    } else {
-      if (recordingTimerRef.current) {
-        clearInterval(recordingTimerRef.current)
+    onStop: (blobUrl, blob) => {
+      if (blob) {
+        handleAudioProcessing(blob);
       }
     }
+  });
 
-    return () => {
-      if (recordingTimerRef.current) {
-        clearInterval(recordingTimerRef.current)
-      }
+  const isRecording = status === 'recording';
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages, isAITyping]);
+
+  useEffect(() => {
+    // Load current conversation
+    const conversation = conversationManager.getCurrentConversation();
+    if (conversation) {
+      setMessages(conversation.messages);
     }
-  }, [isRecording])
+  }, []);
 
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
 
-  const handleStartRecording = async () => {
-    try {
-      clearBlobUrl()
-      await startRecording()
-      toast.success('Recording started')
-    } catch (error) {
-      toast.error('Failed to start recording')
-      console.error('Recording error:', error)
-    }
-  }
+  const handleStartRecording = () => {
+    clearBlobUrl();
+    startRecording();
+    
+    setRecordingTime(0);
+    const id = window.setInterval(() => {
+      setRecordingTime(prev => prev + 1);
+    }, 1000);
+    setTimerId(id);
+  };
 
   const handleStopRecording = () => {
-    stopRecording()
-    toast.success('Recording stopped')
-  }
+    stopRecording();
+    
+    if (timerId) {
+      window.clearInterval(timerId);
+      setTimerId(null);
+    }
+  };
 
-  async function handleRecordingComplete(blobUrl: string, blob: Blob) {
-    if (!blob) return
-
-    setIsProcessing(true)
+  const handleAudioProcessing = async (audioBlob: Blob) => {
+    setIsProcessing(true);
     
     try {
-      const audioFile = new File([blob], 'recording.webm', { type: 'audio/webm' })
+      const audioFile = new File([audioBlob], 'recording.webm', { type: 'audio/webm' });
+      const result = await processAudio(audioFile, undefined, true);
       
-      const result = await processAudioWithBackend(audioFile)
-      
-      const userMessage = addMessage({
+      // Create user message
+      const userMessage = conversationManager.addMessage({
         type: 'user',
         content: result.transcript,
-        audioUrl: blobUrl,
-        emotions: {
-          primary: result.emotions.primary_emotion,
-          confidence: result.emotions.confidence,
-          scores: result.emotions.emotion_scores
-        },
-        sentiment: {
-          label: result.sentiment.sentiment,
-          confidence: result.sentiment.confidence,
-          scores: result.sentiment.scores
-        }
-      })
+        audioUrl: URL.createObjectURL(audioBlob),
+        processingResult: result
+      });
 
-      await generateAndAddAIResponse(result, userMessage.id)
-      setConnectionStatus('connected')
+      setMessages(prev => [...prev, userMessage]);
+      onNewMessage?.(userMessage);
+
+      // Generate AI response
+      await generateAndAddAIResponse(result);
       
     } catch (error) {
-      console.error('Error processing audio:', error)
-      setConnectionStatus('error')
-      toast.error('Failed to process audio')
-      
-      addMessage({
+      console.error('Error processing audio:', error);
+      // Add error message
+      const errorMessage = conversationManager.addMessage({
         type: 'ai',
         content: "I'm sorry, I had trouble processing your audio. Could you try again?"
-      })
+      });
+      setMessages(prev => [...prev, errorMessage]);
     } finally {
-      setIsProcessing(false)
+      setIsProcessing(false);
     }
-  }
+  };
 
-  const handleFileUpload = async (file: File) => {
-    if (!file.type.startsWith('audio/')) {
-      toast.error('Please upload an audio file')
-      return
-    }
-
-    setIsProcessing(true)
+  const generateAndAddAIResponse = async (processingResult: ProcessingResult) => {
+    setIsAITyping(true);
     
     try {
-      const result = await processAudioWithBackend(file)
+      const conversationHistory = conversationManager.getConversationHistory();
       
-      const userMessage = addMessage({
-        type: 'user',
-        content: result.transcript,
-        audioUrl: URL.createObjectURL(file),
-        emotions: {
-          primary: result.emotions.primary_emotion,
-          confidence: result.emotions.confidence,
-          scores: result.emotions.emotion_scores
-        },
-        sentiment: {
-          label: result.sentiment.sentiment,
-          confidence: result.sentiment.confidence,
-          scores: result.sentiment.scores
-        }
-      })
-
-      await generateAndAddAIResponse(result, userMessage.id)
-      setConnectionStatus('connected')
-      
-    } catch (error) {
-      console.error('Error processing file:', error)
-      setConnectionStatus('error')
-      toast.error('Failed to process audio file')
-    } finally {
-      setIsProcessing(false)
-    }
-  }
-
-  const generateAndAddAIResponse = async (processingResult: any, userMessageId: string) => {
-    setIsAITyping(true)
-    
-    try {
-      const conversationHistory = currentConversation?.messages.map(msg => ({
-        role: msg.type === 'user' ? 'user' as const : 'assistant' as const,
-        content: msg.content
-      })) || []
-
       const aiResponse = await generateAIResponse({
         transcript: processingResult.transcript,
-        emotions: {
-          primary: processingResult.emotions.primary_emotion,
-          confidence: processingResult.emotions.confidence,
-          scores: processingResult.emotions.emotion_scores
-        },
-        sentiment: {
-          label: processingResult.sentiment.sentiment,
-          confidence: processingResult.sentiment.confidence,
-          scores: processingResult.sentiment.scores
-        },
+        sentiment: processingResult.sentiment,
+        emotions: processingResult.emotions,
         conversationHistory,
-        personality: aiPersonality
-      })
+        personality: personality.id
+      });
 
-      const aiMessage = addMessage({
+      // Add AI message with typing effect
+      const aiMessage = conversationManager.addMessage({
         type: 'ai',
         content: aiResponse.content,
         isTyping: true
-      })
+      });
 
-      await new Promise(resolve => setTimeout(resolve, 1000 + aiResponse.content.length * 20))
+      setMessages(prev => [...prev, aiMessage]);
 
-      updateMessage(aiMessage.id, { isTyping: false })
+      // Simulate typing delay
+      await new Promise(resolve => setTimeout(resolve, 1000 + aiResponse.content.length * 20));
 
+      // Update message to stop typing
+      conversationManager.updateMessage(aiMessage.id, { isTyping: false });
+      setMessages(prev => prev.map(msg => 
+        msg.id === aiMessage.id ? { ...msg, isTyping: false } : msg
+      ));
+
+      // Speak the response if auto-speak is enabled
       if (autoSpeak && voiceSettings.enabled) {
-        await speakText(aiResponse.content, voiceSettings, processingResult.emotions.primary_emotion)
+        const emotionalSettings = processingResult.emotions 
+          ? ttsService.getEmotionalSettings(processingResult.emotions.primary_emotion)
+          : {};
+        
+        await ttsService.speak(aiResponse.content, {
+          ...voiceSettings,
+          ...emotionalSettings
+        });
       }
+
+      onNewMessage?.(aiMessage);
       
     } catch (error) {
-      console.error('Error generating AI response:', error)
+      console.error('Error generating AI response:', error);
       
-      const fallbackMessage = addMessage({
+      const fallbackMessage = conversationManager.addMessage({
         type: 'ai',
         content: "I'm here to listen. What would you like to talk about?"
-      })
+      });
       
-      updateMessage(fallbackMessage.id, { isTyping: false })
+      setMessages(prev => [...prev, fallbackMessage]);
     } finally {
-      setIsAITyping(false)
+      setIsAITyping(false);
     }
-  }
+  };
 
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault()
-    setDragActive(true)
-  }
-
-  const handleDragLeave = (e: React.DragEvent) => {
-    e.preventDefault()
-    setDragActive(false)
-  }
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault()
-    setDragActive(false)
-    
-    const files = Array.from(e.dataTransfer.files)
-    const audioFile = files.find(file => file.type.startsWith('audio/'))
-    
-    if (audioFile) {
-      handleFileUpload(audioFile)
-    } else {
-      toast.error('Please drop an audio file')
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      handleAudioFile(file);
     }
-  }
+  };
 
-  const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60)
-    const secs = seconds % 60
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
-  }
+  const handleAudioFile = async (file: File) => {
+    setIsProcessing(true);
+    
+    try {
+      const result = await processAudio(file, undefined, true);
+      
+      const userMessage = conversationManager.addMessage({
+        type: 'user',
+        content: result.transcript,
+        audioUrl: URL.createObjectURL(file),
+        processingResult: result
+      });
+
+      setMessages(prev => [...prev, userMessage]);
+      onNewMessage?.(userMessage);
+
+      await generateAndAddAIResponse(result);
+      
+    } catch (error) {
+      console.error('Error processing audio file:', error);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
 
   const handleSpeakMessage = async (content: string, emotion?: string) => {
-    if (isSpeaking()) {
-      stopSpeaking()
-      return
+    if (ttsService.isSpeaking()) {
+      ttsService.stop();
+      return;
     }
+
+    const emotionalSettings = emotion 
+      ? ttsService.getEmotionalSettings(emotion)
+      : {};
 
     try {
-      await speakText(content, voiceSettings, emotion)
+      await ttsService.speak(content, {
+        ...voiceSettings,
+        ...emotionalSettings
+      });
     } catch (error) {
-      console.error('Error speaking message:', error)
-      toast.error('Failed to speak message')
+      console.error('Error speaking message:', error);
     }
-  }
+  };
 
-  const getConnectionStatusColor = () => {
-    switch (connectionStatus) {
-      case 'connected': return 'text-green-500'
-      case 'error': return 'text-red-500'
-      default: return 'text-gray-500'
+  const handleExportConversation = () => {
+    const conversation = conversationManager.getCurrentConversation();
+    if (!conversation) return;
+
+    const exportData = conversationManager.exportConversation(conversation.id);
+    const blob = new Blob([exportData], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `conversation-${conversation.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleClearConversation = () => {
+    if (window.confirm('Are you sure you want to clear this conversation?')) {
+      const conversation = conversationManager.getCurrentConversation();
+      if (conversation) {
+        conversationManager.deleteConversation(conversation.id);
+        setMessages([]);
+      }
     }
-  }
+  };
+
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
 
   return (
-    <div className="flex flex-col h-full bg-white dark:bg-gray-900">
+    <div className="flex flex-col h-full bg-white/5 dark:bg-black/5 backdrop-blur-lg rounded-lg border border-white/10 dark:border-gray-800/50">
       {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700 safe-area-top">
+      <div className="flex items-center justify-between p-4 border-b border-white/10 dark:border-gray-800/50">
         <div className="flex items-center">
-          <div className="w-10 h-10 rounded-full bg-gradient-to-r from-primary-500 to-secondary-500 flex items-center justify-center mr-3">
-            <span className="text-white text-lg">🤖</span>
+          <div className={`w-10 h-10 rounded-full flex items-center justify-center text-2xl ${personality.color}`}>
+            {personality.icon}
           </div>
-          <div>
-            <h2 className="font-semibold text-gray-900 dark:text-white">
-              AI Assistant
-            </h2>
-            <p className={`text-sm ${getConnectionStatusColor()}`}>
-              {connectionStatus === 'connected' ? 'Online' : 
-               connectionStatus === 'error' ? 'Connection Error' : 'Offline'}
-            </p>
+          <div className="ml-3">
+            <h3 className="font-medium text-gray-800 dark:text-white">{personality.name}</h3>
+            <p className="text-sm text-gray-500 dark:text-gray-400">{personality.description}</p>
           </div>
         </div>
         
         <div className="flex items-center space-x-2">
           <button
-            onClick={() => isSpeaking() ? stopSpeaking() : null}
-            disabled={!isSpeaking()}
-            className="p-2 rounded-full bg-gray-100 dark:bg-gray-800 disabled:opacity-50 touch-manipulation"
+            onClick={handleExportConversation}
+            className="p-2 rounded-lg bg-white/10 dark:bg-black/10 hover:bg-white/20 dark:hover:bg-black/20 transition-colors"
+            title="Export conversation"
           >
-            {isSpeaking() ? <VolumeX size={20} /> : <Volume2 size={20} />}
+            <Download size={18} />
           </button>
-          
           <button
-            onClick={() => window.location.reload()}
-            className="p-2 rounded-full bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 touch-manipulation"
-            title="Refresh connection"
+            onClick={handleClearConversation}
+            className="p-2 rounded-lg bg-white/10 dark:bg-black/10 hover:bg-red-500/20 transition-colors text-red-500"
+            title="Clear conversation"
           >
-            <RefreshCw size={20} />
+            <Trash2 size={18} />
           </button>
         </div>
       </div>
 
       {/* Messages */}
-      <div 
-        className="flex-1 overflow-y-auto p-4 space-y-4"
-        onDragOver={handleDragOver}
-        onDragLeave={handleDragLeave}
-        onDrop={handleDrop}
-      >
+      <div className="flex-1 overflow-y-auto p-4 space-y-4">
         <AnimatePresence>
-          {dragActive && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 bg-primary-500/20 backdrop-blur-sm z-40 flex items-center justify-center"
-            >
-              <div className="bg-white dark:bg-gray-800 rounded-2xl p-8 shadow-xl">
-                <Upload size={48} className="mx-auto mb-4 text-primary-500" />
-                <p className="text-lg font-medium text-gray-900 dark:text-white text-center">
-                  Drop your audio file here
-                </p>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        <AnimatePresence>
-          {currentConversation?.messages.map((message) => (
+          {messages.map((message) => (
             <MessageBubble
               key={message.id}
               message={message}
               onSpeak={handleSpeakMessage}
-              isSpeaking={isSpeaking()}
+              isSpeaking={ttsService.isSpeaking()}
             />
           ))}
         </AnimatePresence>
         
         {isAITyping && <TypingIndicator />}
-        
-        {currentConversation?.messages.length === 0 && (
-          <div className="text-center py-12">
-            <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-gradient-to-r from-primary-500 to-secondary-500 flex items-center justify-center">
-              <Mic className="w-8 h-8 text-white" />
-            </div>
-            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
-              Start a conversation
-            </h3>
-            <p className="text-gray-500 dark:text-gray-400 mb-6">
-              Record your voice or upload an audio file to begin
-            </p>
-          </div>
-        )}
-        
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Recording Visualization */}
-      {isRecording && (
-        <div className="px-4 py-2 border-t border-gray-200 dark:border-gray-700">
-          <AudioWaveform isRecording={true} />
-          <div className="text-center text-gray-600 dark:text-gray-400 mt-2">
-            Recording: {formatTime(recordingTime)}
-          </div>
-        </div>
-      )}
-
       {/* Input Area */}
-      <div className="p-4 border-t border-gray-200 dark:border-gray-700 safe-area-bottom">
+      <div className="p-4 border-t border-white/10 dark:border-gray-800/50">
+        {isRecording && (
+          <div className="mb-4">
+            <AudioVisualizer isRecording={true} />
+            <div className="text-center text-gray-600 dark:text-gray-400 mt-2">
+              Recording: {formatTime(recordingTime)}
+            </div>
+          </div>
+        )}
+
         <div className="flex items-center space-x-3">
           <input
             ref={fileInputRef}
             type="file"
             accept="audio/*"
-            onChange={(e) => {
-              const file = e.target.files?.[0]
-              if (file) handleFileUpload(file)
-            }}
+            onChange={handleFileUpload}
             className="hidden"
           />
           
           <button
             onClick={() => fileInputRef.current?.click()}
             disabled={isProcessing || isRecording}
-            className="p-3 rounded-full bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-50 transition-colors touch-manipulation"
+            className="p-3 rounded-full bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors disabled:opacity-50"
+            title="Upload audio file"
           >
-            <Upload size={20} />
+            <Send size={20} />
           </button>
 
           <div className="flex-1 flex justify-center">
@@ -400,35 +347,38 @@ export default function ChatInterface() {
               <motion.button
                 onClick={handleStartRecording}
                 disabled={isProcessing}
-                className="btn-primary flex items-center px-8 py-4 text-lg touch-manipulation"
+                className="flex items-center px-6 py-3 bg-gradient-to-r from-yellow-500 to-yellow-600 text-white rounded-full shadow-lg hover:shadow-xl disabled:opacity-50 transition-all"
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
               >
-                <Mic size={24} className="mr-2" />
-                {isProcessing ? 'Processing...' : 'Record'}
+                <Mic size={20} className="mr-2" />
+                {isProcessing ? 'Processing...' : 'Start Recording'}
               </motion.button>
             ) : (
               <motion.button
                 onClick={handleStopRecording}
-                className="bg-red-500 hover:bg-red-600 text-white font-medium py-4 px-8 rounded-xl transition-all duration-200 shadow-lg hover:shadow-xl active:scale-95 flex items-center text-lg touch-manipulation"
+                className="flex items-center px-6 py-3 bg-red-500 text-white rounded-full shadow-lg hover:shadow-xl transition-all"
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
               >
-                <Square size={24} className="mr-2" />
-                Stop
+                <Square size={20} className="mr-2" />
+                Stop Recording
               </motion.button>
             )}
           </div>
 
           <button
-            onClick={() => {/* Voice commands handler */}}
-            disabled={isProcessing || isRecording}
-            className="p-3 rounded-full bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-50 transition-colors touch-manipulation"
+            onClick={() => ttsService.isSpeaking() ? ttsService.stop() : null}
+            disabled={!ttsService.isSpeaking()}
+            className="p-3 rounded-full bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors disabled:opacity-50"
+            title={ttsService.isSpeaking() ? "Stop speaking" : "Not speaking"}
           >
-            <Send size={20} />
+            {ttsService.isSpeaking() ? <VolumeX size={20} /> : <Volume2 size={20} />}
           </button>
         </div>
       </div>
     </div>
-  )
-}
+  );
+};
+
+export default ChatInterface;
