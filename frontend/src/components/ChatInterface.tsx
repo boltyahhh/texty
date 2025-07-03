@@ -1,15 +1,19 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Send, Mic, Square, Volume2, VolumeX, Download, Trash2 } from 'lucide-react';
+import { Send, Mic, Square, Volume2, VolumeX, Download, Trash2, Upload } from 'lucide-react';
 import { useReactMediaRecorder } from 'react-media-recorder';
 import { Message, ProcessingResult, AIPersonality } from '../types';
 import { processAudio } from '../services/api';
 import { generateAIResponse } from '../services/openai';
 import { ttsService } from '../services/textToSpeech';
 import { conversationManager } from '../services/conversationManager';
+import { useResponsiveDesign } from '../hooks/useResponsiveDesign';
+import { useHapticFeedback } from '../hooks/useHapticFeedback';
+import { useToast } from './ToastNotification';
 import MessageBubble from './MessageBubble';
 import TypingIndicator from './TypingIndicator';
 import AudioVisualizer from './AudioVisualizer';
+import MobileOptimizedButton from './MobileOptimizedButton';
 
 interface ChatInterfaceProps {
   personality: AIPersonality;
@@ -29,8 +33,14 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const [isAITyping, setIsAITyping] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
   const [timerId, setTimerId] = useState<number | null>(null);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const chatContainerRef = useRef<HTMLDivElement>(null);
+
+  const { isMobile, isCompact, config } = useResponsiveDesign();
+  const { triggerHaptic } = useHapticFeedback();
+  const { success, error, warning } = useToast();
 
   const {
     status,
@@ -61,6 +71,38 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     }
   }, []);
 
+  // Handle mobile keyboard
+  useEffect(() => {
+    if (!isMobile) return;
+
+    const handleResize = () => {
+      const viewportHeight = window.visualViewport?.height || window.innerHeight;
+      const windowHeight = window.innerHeight;
+      const heightDiff = windowHeight - viewportHeight;
+      
+      setKeyboardHeight(heightDiff > 150 ? heightDiff : 0);
+    };
+
+    const handleVisualViewportChange = () => {
+      handleResize();
+      setTimeout(scrollToBottom, 100);
+    };
+
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', handleVisualViewportChange);
+    } else {
+      window.addEventListener('resize', handleResize);
+    }
+
+    return () => {
+      if (window.visualViewport) {
+        window.visualViewport.removeEventListener('resize', handleVisualViewportChange);
+      } else {
+        window.removeEventListener('resize', handleResize);
+      }
+    };
+  }, [isMobile]);
+
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
@@ -68,6 +110,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const handleStartRecording = () => {
     clearBlobUrl();
     startRecording();
+    triggerHaptic('medium');
     
     setRecordingTime(0);
     const id = window.setInterval(() => {
@@ -78,6 +121,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
   const handleStopRecording = () => {
     stopRecording();
+    triggerHaptic('light');
     
     if (timerId) {
       window.clearInterval(timerId);
@@ -103,12 +147,15 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       setMessages(prev => [...prev, userMessage]);
       onNewMessage?.(userMessage);
 
+      success('Audio processed successfully', `Detected emotion: ${result.emotions?.primary_emotion || 'unknown'}`);
+
       // Generate AI response
       await generateAndAddAIResponse(result);
       
-    } catch (error) {
-      console.error('Error processing audio:', error);
-      // Add error message
+    } catch (err) {
+      console.error('Error processing audio:', err);
+      error('Processing failed', 'Could not process your audio. Please try again.');
+      
       const errorMessage = conversationManager.addMessage({
         type: 'ai',
         content: "I'm sorry, I had trouble processing your audio. Could you try again?"
@@ -165,8 +212,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
       onNewMessage?.(aiMessage);
       
-    } catch (error) {
-      console.error('Error generating AI response:', error);
+    } catch (err) {
+      console.error('Error generating AI response:', err);
+      error('AI response failed', 'Could not generate a response. Please try again.');
       
       const fallbackMessage = conversationManager.addMessage({
         type: 'ai',
@@ -182,6 +230,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
+      if (!file.type.startsWith('audio/')) {
+        warning('Invalid file type', 'Please select an audio file.');
+        return;
+      }
       handleAudioFile(file);
     }
   };
@@ -202,10 +254,13 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       setMessages(prev => [...prev, userMessage]);
       onNewMessage?.(userMessage);
 
+      success('File processed successfully', `Detected emotion: ${result.emotions?.primary_emotion || 'unknown'}`);
+
       await generateAndAddAIResponse(result);
       
-    } catch (error) {
-      console.error('Error processing audio file:', error);
+    } catch (err) {
+      console.error('Error processing audio file:', err);
+      error('File processing failed', 'Could not process the audio file.');
     } finally {
       setIsProcessing(false);
     }
@@ -226,8 +281,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         ...voiceSettings,
         ...emotionalSettings
       });
-    } catch (error) {
-      console.error('Error speaking message:', error);
+    } catch (err) {
+      console.error('Error speaking message:', err);
+      error('Speech failed', 'Could not speak the message.');
     }
   };
 
@@ -246,6 +302,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+
+    success('Conversation exported', 'Your conversation has been downloaded.');
   };
 
   const handleClearConversation = () => {
@@ -254,6 +312,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       if (conversation) {
         conversationManager.deleteConversation(conversation.id);
         setMessages([]);
+        success('Conversation cleared', 'Your conversation has been cleared.');
+        triggerHaptic('heavy');
       }
     }
   };
@@ -265,7 +325,13 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   };
 
   return (
-    <div className="flex flex-col h-full bg-white/5 dark:bg-black/5 backdrop-blur-lg rounded-lg border border-white/10 dark:border-gray-800/50">
+    <div 
+      className="flex flex-col h-full bg-white/5 dark:bg-black/5 backdrop-blur-lg rounded-lg border border-white/10 dark:border-gray-800/50"
+      style={{ 
+        paddingBottom: isMobile ? `${keyboardHeight}px` : '0px',
+        transition: 'padding-bottom 0.3s ease-in-out'
+      }}
+    >
       {/* Header */}
       <div className="flex items-center justify-between p-4 border-b border-white/10 dark:border-gray-800/50">
         <div className="flex items-center">
@@ -279,25 +345,32 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         </div>
         
         <div className="flex items-center space-x-2">
-          <button
+          <MobileOptimizedButton
             onClick={handleExportConversation}
-            className="p-2 rounded-lg bg-white/10 dark:bg-black/10 hover:bg-white/20 dark:hover:bg-black/20 transition-colors"
-            title="Export conversation"
-          >
-            <Download size={18} />
-          </button>
-          <button
+            variant="ghost"
+            size="small"
+            icon={<Download size={18} />}
+            hapticFeedback="light"
+          />
+          <MobileOptimizedButton
             onClick={handleClearConversation}
-            className="p-2 rounded-lg bg-white/10 dark:bg-black/10 hover:bg-red-500/20 transition-colors text-red-500"
-            title="Clear conversation"
-          >
-            <Trash2 size={18} />
-          </button>
+            variant="ghost"
+            size="small"
+            icon={<Trash2 size={18} />}
+            hapticFeedback="heavy"
+            className="text-red-500 hover:text-red-600"
+          />
         </div>
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div 
+        ref={chatContainerRef}
+        className="flex-1 overflow-y-auto p-4 space-y-4 scroll-smooth"
+        style={{ 
+          maxHeight: isMobile ? `calc(100vh - 200px - ${keyboardHeight}px)` : 'auto'
+        }}
+      >
         <AnimatePresence>
           {messages.map((message) => (
             <MessageBubble
@@ -316,12 +389,17 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       {/* Input Area */}
       <div className="p-4 border-t border-white/10 dark:border-gray-800/50">
         {isRecording && (
-          <div className="mb-4">
+          <motion.div 
+            className="mb-4"
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+          >
             <AudioVisualizer isRecording={true} />
             <div className="text-center text-gray-600 dark:text-gray-400 mt-2">
               Recording: {formatTime(recordingTime)}
             </div>
-          </div>
+          </motion.div>
         )}
 
         <div className="flex items-center space-x-3">
@@ -333,48 +411,51 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             className="hidden"
           />
           
-          <button
+          <MobileOptimizedButton
             onClick={() => fileInputRef.current?.click()}
             disabled={isProcessing || isRecording}
-            className="p-3 rounded-full bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors disabled:opacity-50"
-            title="Upload audio file"
-          >
-            <Send size={20} />
-          </button>
+            variant="secondary"
+            size={isMobile ? "large" : "medium"}
+            icon={<Upload size={20} />}
+            hapticFeedback="light"
+          />
 
           <div className="flex-1 flex justify-center">
             {!isRecording ? (
-              <motion.button
+              <MobileOptimizedButton
                 onClick={handleStartRecording}
                 disabled={isProcessing}
-                className="flex items-center px-6 py-3 bg-gradient-to-r from-yellow-500 to-yellow-600 text-white rounded-full shadow-lg hover:shadow-xl disabled:opacity-50 transition-all"
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
+                variant="primary"
+                size={isMobile ? "large" : "medium"}
+                loading={isProcessing}
+                icon={<Mic size={20} />}
+                hapticFeedback="medium"
+                fullWidth={isMobile}
               >
-                <Mic size={20} className="mr-2" />
                 {isProcessing ? 'Processing...' : 'Start Recording'}
-              </motion.button>
+              </MobileOptimizedButton>
             ) : (
-              <motion.button
+              <MobileOptimizedButton
                 onClick={handleStopRecording}
-                className="flex items-center px-6 py-3 bg-red-500 text-white rounded-full shadow-lg hover:shadow-xl transition-all"
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
+                variant="danger"
+                size={isMobile ? "large" : "medium"}
+                icon={<Square size={20} />}
+                hapticFeedback="heavy"
+                fullWidth={isMobile}
               >
-                <Square size={20} className="mr-2" />
                 Stop Recording
-              </motion.button>
+              </MobileOptimizedButton>
             )}
           </div>
 
-          <button
+          <MobileOptimizedButton
             onClick={() => ttsService.isSpeaking() ? ttsService.stop() : null}
             disabled={!ttsService.isSpeaking()}
-            className="p-3 rounded-full bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors disabled:opacity-50"
-            title={ttsService.isSpeaking() ? "Stop speaking" : "Not speaking"}
-          >
-            {ttsService.isSpeaking() ? <VolumeX size={20} /> : <Volume2 size={20} />}
-          </button>
+            variant="secondary"
+            size={isMobile ? "large" : "medium"}
+            icon={ttsService.isSpeaking() ? <VolumeX size={20} /> : <Volume2 size={20} />}
+            hapticFeedback="light"
+          />
         </div>
       </div>
     </div>

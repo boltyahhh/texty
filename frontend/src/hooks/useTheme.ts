@@ -18,18 +18,54 @@ export const useTheme = () => {
     return 'light';
   });
 
-  // Apply theme to document
+  // Apply theme to document with smooth transitions
   useEffect(() => {
     const root = window.document.documentElement;
     
+    // Add transition class for smooth theme switching
+    root.classList.add('theme-transition');
+    
+    // Remove existing theme classes
     root.classList.remove('light', 'dark');
+    
+    // Add new theme class
     root.classList.add(theme);
+    
+    // Store theme preference
     localStorage.setItem('theme', theme);
+    
+    // Update meta theme-color for mobile browsers
+    const metaThemeColor = document.querySelector('meta[name="theme-color"]');
+    if (metaThemeColor) {
+      metaThemeColor.setAttribute('content', theme === 'dark' ? '#1f2937' : '#ffffff');
+    } else {
+      const meta = document.createElement('meta');
+      meta.name = 'theme-color';
+      meta.content = theme === 'dark' ? '#1f2937' : '#ffffff';
+      document.head.appendChild(meta);
+    }
+    
+    // Remove transition class after animation completes
+    const timer = setTimeout(() => {
+      root.classList.remove('theme-transition');
+    }, 300);
+    
+    return () => clearTimeout(timer);
   }, [theme]);
 
   const toggleTheme = () => {
     setTheme(prevTheme => (prevTheme === 'light' ? 'dark' : 'light'));
   };
 
-  return { theme, toggleTheme };
+  const setLightTheme = () => setTheme('light');
+  const setDarkTheme = () => setTheme('dark');
+
+  return { 
+    theme, 
+    toggleTheme, 
+    setLightTheme, 
+    setDarkTheme,
+    isDark: theme === 'dark',
+    isLight: theme === 'light'
+  };
 };

@@ -5,12 +5,12 @@ import time
 from typing import Dict, Any, Optional
 import torch
 import re
-from .emotion_analysis import EmotionAnalysisService
+from .enhanced_emotion_analysis import EnhancedEmotionAnalysisService
 
 class SentimentAnalysisService:
     def __init__(self, method: str = "transformers"):
         """
-        Initialize sentiment analysis service with multi-language support and precise emotions
+        Initialize sentiment analysis service with enhanced emotion analysis
         
         Args:
             method: "transformers", "textblob", or "vader"
@@ -18,7 +18,7 @@ class SentimentAnalysisService:
         self.method = method
         self.analyzer = None
         self.multilingual_analyzer = None
-        self.emotion_service = EmotionAnalysisService()
+        self.emotion_service = EnhancedEmotionAnalysisService()
         self.south_indian_languages = {
             'ta': 'Tamil',
             'te': 'Telugu', 
@@ -246,7 +246,7 @@ class SentimentAnalysisService:
     
     async def analyze_sentiment(self, text: str, language: Optional[str] = None) -> Dict[str, Any]:
         """
-        Analyze sentiment of the given text with multi-language support and precise emotions
+        Analyze sentiment of the given text with enhanced emotion analysis
         
         Args:
             text: Text to analyze
@@ -296,7 +296,7 @@ class SentimentAnalysisService:
                 else:
                     raise ValueError(f"Unknown sentiment analysis method: {self.method}")
             
-            # Perform precise emotion analysis
+            # Perform enhanced emotion analysis
             emotion_result = await self.emotion_service.analyze_emotions(text, language)
             
             # Combine results
@@ -451,8 +451,8 @@ class SentimentAnalysisService:
                 "Language detection",
                 "Confidence scoring",
                 "23 precise emotions",
-                "Emotion categorization",
-                "Intensity levels"
+                "Enhanced emotion accuracy",
+                "Context-aware analysis"
             ]
         }
     
