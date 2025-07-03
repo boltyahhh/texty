@@ -1,7 +1,7 @@
 {
-  "name": "speech-sentiment-analyzer",
+  "name": "enhanced-ai-companion",
   "private": true,
-  "version": "0.2.0",
+  "version": "2.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
