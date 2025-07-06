@@ -5,6 +5,7 @@ from models.schemas import AudioProcessResponse, HealthResponse, LanguageDetecti
 from services.speech_to_text import SpeechToTextService
 from services.sentiment_analysis import SentimentAnalysisService
 from utils.audio_processing import AudioProcessor
+from cloudwatch_endpoint import router as cloudwatch_router
 import os
 import uvicorn
 from typing import Optional
@@ -28,12 +29,17 @@ app.add_middleware(
         "http://localhost:8080",  # Vue CLI
         "http://127.0.0.1:3000",  # Alternative localhost
         "http://127.0.0.1:5173",  # Alternative localhost
-        "https://your-production-frontend.com"
+        "https://*.vercel.app",   # Vercel deployments
+        "https://*.netlify.app",  # Netlify deployments
+        "*"  # Allow all origins in production (configure as needed)
     ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Include CloudWatch metrics router
+app.include_router(cloudwatch_router)
 
 # Initialize services
 stt_service = SpeechToTextService()
