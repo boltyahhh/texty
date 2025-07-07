@@ -10,9 +10,9 @@ import VoiceSettings from './components/VoiceSettings';
 import AdvancedEmotionDashboard from './components/AdvancedEmotionDashboard';
 import SmartWellnessSystem from './components/SmartWellnessSystem';
 import ConversationHistory from './components/ConversationHistory';
+import ApiStatus from './components/ApiStatus';
 import { conversationManager } from './services/conversationManager';
 import { AIPersonality, VoiceSettings as VoiceSettingsType, Message, Conversation, UserPreferences } from './types';
-import './styles/responsive.css';
 
 const AI_PERSONALITIES: AIPersonality[] = [
   {
@@ -221,7 +221,7 @@ function App() {
 
   return (
     <div 
-      className={`min-h-screen transition-colors duration-500 ${
+      className={`min-h-screen transition-colors duration-500 bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 ${
         currentEmotion ? `emotion-${currentEmotion}` : ''
       }`}
       {...gestureProps}
@@ -231,6 +231,11 @@ function App() {
         onViewChange={handleViewChange}
         onNewConversation={handleNewConversation}
       >
+        {/* API Status Indicator */}
+        <div className="fixed top-4 right-4 z-50">
+          <ApiStatus />
+        </div>
+
         <AnimatePresence mode="wait">
           {currentView === 'chat' && (
             <motion.div
@@ -311,7 +316,7 @@ function App() {
                   ? 'grid-cols-1 lg:grid-cols-2' 
                   : 'grid-cols-1'
               }`}>
-                <div className="bg-white/10 dark:bg-black/10 backdrop-blur-lg rounded-lg p-6 border border-white/20 dark:border-gray-800/50">
+                <div className="glass-effect rounded-lg p-6">
                   <PersonalitySelector
                     personalities={AI_PERSONALITIES}
                     selectedPersonality={selectedPersonality}
@@ -321,7 +326,7 @@ function App() {
                   />
                 </div>
                 
-                <div className="bg-white/10 dark:bg-black/10 backdrop-blur-lg rounded-lg p-6 border border-white/20 dark:border-gray-800/50">
+                <div className="glass-effect rounded-lg p-6">
                   <VoiceSettings
                     settings={preferences.voiceSettings}
                     onSettingsChange={(voiceSettings) =>
@@ -331,7 +336,7 @@ function App() {
                 </div>
               </div>
 
-              <div className="bg-white/10 dark:bg-black/10 backdrop-blur-lg rounded-lg p-6 border border-white/20 dark:border-gray-800/50">
+              <div className="glass-effect rounded-lg p-6">
                 <h3 className="text-lg font-medium text-gray-800 dark:text-white mb-4">General Settings</h3>
                 
                 <div className="space-y-4">
@@ -379,8 +384,27 @@ function App() {
                 </div>
               </div>
 
+              {/* API Configuration */}
+              <div className="glass-effect rounded-lg p-6">
+                <h3 className="text-lg font-medium text-gray-800 dark:text-white mb-4">API Configuration</h3>
+                <div className="space-y-3">
+                  <div>
+                    <span className="text-sm text-gray-500 dark:text-gray-400">Current API URL:</span>
+                    <div className="mt-1 p-3 bg-gray-100 dark:bg-gray-800 rounded-lg font-mono text-sm">
+                      {import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000'}
+                    </div>
+                  </div>
+                  <div className="text-xs text-gray-500 dark:text-gray-400">
+                    {(import.meta.env.VITE_API_URL || '').includes('localhost') || 
+                     (import.meta.env.VITE_API_URL || '').includes('127.0.0.1') ? 
+                     '🏠 Using local development server' : 
+                     '☁️ Using AWS Lambda production server'}
+                  </div>
+                </div>
+              </div>
+
               {/* Device Information */}
-              <div className="bg-white/10 dark:bg-black/10 backdrop-blur-lg rounded-lg p-6 border border-white/20 dark:border-gray-800/50">
+              <div className="glass-effect rounded-lg p-6">
                 <h3 className="text-lg font-medium text-gray-800 dark:text-white mb-4">Device Information</h3>
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div>

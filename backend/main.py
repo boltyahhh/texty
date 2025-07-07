@@ -20,7 +20,7 @@ app = FastAPI(
     version="3.0.0"
 )
 
-# CORS setup for frontend access
+# CORS setup for frontend access - Allow both localhost and production
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -62,8 +62,9 @@ async def root():
 
 @app.get("/health", response_model=HealthResponse)
 async def health_check():
+    """Health check endpoint for monitoring"""
     return HealthResponse(
-        message="API is healthy",
+        message="API is healthy and ready to process audio",
         status="healthy",
         version="3.0.0"
     )
@@ -263,9 +264,14 @@ async def get_model_info():
 
 # --- Main entry point ---
 if __name__ == "__main__":
+    print("🚀 Starting VoiceInsight API Server...")
+    print(f"📍 Environment: {os.getenv('ENVIRONMENT', 'development')}")
+    print(f"🔗 CORS enabled for localhost development")
+    
     uvicorn.run(
         "main:app",
-        host="127.0.0.1",  # Use this for local testing
+        host="0.0.0.0",  # Allow external connections
         port=8000,
-        reload=True
+        reload=True,
+        log_level="info"
     )
