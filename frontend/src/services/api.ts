@@ -1,20 +1,8 @@
 import axios from 'axios';
 import { ProcessingResult, SupportedEmotions } from '../types';
 
-// Get API URL from environment variables with fallbacks
-const getApiUrl = () => {
-  // Check for production Lambda URL first
-  if (import.meta.env.VITE_API_URL) {
-    return import.meta.env.VITE_API_URL;
-  }
-  
-  // Fallback to localhost for development
-  return 'http://127.0.0.1:8000';
-};
-
-const API_BASE_URL = getApiUrl();
-
-console.log('🔗 API Base URL:', API_BASE_URL);
+// Set the FastAPI backend URL via Vite environment variable or default to your FastAPI server
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
 
 // Create an Axios instance
 const api = axios.create({
@@ -22,32 +10,7 @@ const api = axios.create({
   headers: {
     'Content-Type': 'multipart/form-data',
   },
-  timeout: 30000, // 30 second timeout
 });
-
-// Add request interceptor for logging
-api.interceptors.request.use(
-  (config) => {
-    console.log(`📤 API Request: ${config.method?.toUpperCase()} ${config.url}`);
-    return config;
-  },
-  (error) => {
-    console.error('📤 API Request Error:', error);
-    return Promise.reject(error);
-  }
-);
-
-// Add response interceptor for logging
-api.interceptors.response.use(
-  (response) => {
-    console.log(`📥 API Response: ${response.status} ${response.config.url}`);
-    return response;
-  },
-  (error) => {
-    console.error('📥 API Response Error:', error.response?.status, error.response?.data);
-    return Promise.reject(error);
-  }
-);
 
 /**
  * Uploads the audio file and receives transcript + sentiment analysis result with precise emotions
@@ -84,9 +47,7 @@ export const processAudio = async (
     };
   } catch (error) {
     if (axios.isAxiosError(error)) {
-      const errorMessage = error.response?.data?.detail || error.message || 'Failed to process audio';
-      console.error('🚨 Audio processing error:', errorMessage);
-      throw new Error(errorMessage);
+      throw new Error(error.response?.data?.detail || 'Failed to process audio');
     }
     throw error;
   }
@@ -181,22 +142,6 @@ export const getModelInfo = async () => {
   } catch (error) {
     if (axios.isAxiosError(error)) {
       throw new Error(error.response?.data?.detail || 'Failed to get model info');
-    }
-    throw error;
-  }
-};
-
-/**
- * Test API health
- * @returns Health status
- */
-export const testApiHealth = async () => {
-  try {
-    const response = await api.get('/health');
-    return response.data;
-  } catch (error) {
-    if (axios.isAxiosError(error)) {
-      throw new Error(error.response?.data?.detail || 'API health check failed');
     }
     throw error;
   }

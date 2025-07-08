@@ -43,10 +43,11 @@ const Header: React.FC = () => {
         </motion.div>
         
         <motion.button
-          className="relative p-3 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 transition-all duration-300 shadow-md hover:shadow-lg min-h-[48px] min-w-[48px]"
+          className="relative p-3 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 transition-all duration-300 shadow-md hover:shadow-lg"
           onClick={handleThemeToggle}
           whileHover={{ scale: 1.1 }}
           whileTap={{ scale: 0.9 }}
+          style={{ minHeight: '48px', minWidth: '48px' }}
           aria-label={`Switch to ${isDark ? 'light' : 'dark'} mode`}
         >
           <motion.div

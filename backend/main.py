@@ -5,7 +5,6 @@ from models.schemas import AudioProcessResponse, HealthResponse, LanguageDetecti
 from services.speech_to_text import SpeechToTextService
 from services.sentiment_analysis import SentimentAnalysisService
 from utils.audio_processing import AudioProcessor
-from cloudwatch_endpoint import router as cloudwatch_router
 import os
 import uvicorn
 from typing import Optional
@@ -20,7 +19,7 @@ app = FastAPI(
     version="3.0.0"
 )
 
-# CORS setup for frontend access - Allow both localhost and production
+# CORS setup for frontend access
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -29,17 +28,12 @@ app.add_middleware(
         "http://localhost:8080",  # Vue CLI
         "http://127.0.0.1:3000",  # Alternative localhost
         "http://127.0.0.1:5173",  # Alternative localhost
-        "https://*.vercel.app",   # Vercel deployments
-        "https://*.netlify.app",  # Netlify deployments
-        "*"  # Allow all origins in production (configure as needed)
+        "https://your-production-frontend.com"
     ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# Include CloudWatch metrics router
-app.include_router(cloudwatch_router)
 
 # Initialize services
 stt_service = SpeechToTextService()
@@ -62,9 +56,8 @@ async def root():
 
 @app.get("/health", response_model=HealthResponse)
 async def health_check():
-    """Health check endpoint for monitoring"""
     return HealthResponse(
-        message="API is healthy and ready to process audio",
+        message="API is healthy",
         status="healthy",
         version="3.0.0"
     )
@@ -264,14 +257,9 @@ async def get_model_info():
 
 # --- Main entry point ---
 if __name__ == "__main__":
-    print("🚀 Starting VoiceInsight API Server...")
-    print(f"📍 Environment: {os.getenv('ENVIRONMENT', 'development')}")
-    print(f"🔗 CORS enabled for localhost development")
-    
     uvicorn.run(
         "main:app",
-        host="0.0.0.0",  # Allow external connections
+        host="127.0.0.1",  # Use this for local testing
         port=8000,
-        reload=True,
-        log_level="info"
+        reload=True
     )
