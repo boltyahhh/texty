@@ -1,10 +1,19 @@
 import OpenAI from 'openai';
 
-// Initialize OpenAI client
-const openai = new OpenAI({
-  apiKey: import.meta.env.VITE_OPENAI_API_KEY,
-  dangerouslyAllowBrowser: true // Note: In production, use a backend proxy
-});
+// Initialize OpenAI client with error handling
+let openai: OpenAI | null = null;
+
+try {
+  const apiKey = import.meta.env.VITE_OPENAI_API_KEY;
+  if (apiKey && apiKey !== 'your_openai_api_key_here') {
+    openai = new OpenAI({
+      apiKey,
+      dangerouslyAllowBrowser: true // Note: In production, use a backend proxy
+    });
+  }
+} catch (error) {
+  console.warn('OpenAI client initialization failed:', error);
+}
 
 export interface AIResponse {
   content: string;
@@ -34,6 +43,10 @@ const PERSONALITY_PROMPTS = {
 
 export const generateAIResponse = async (context: ConversationContext): Promise<AIResponse> => {
   try {
+    if (!openai) {
+      throw new Error('OpenAI client not initialized');
+    }
+    
     const { transcript, sentiment, emotions, conversationHistory, personality } = context;
     
     const systemPrompt = PERSONALITY_PROMPTS[personality as keyof typeof PERSONALITY_PROMPTS] || PERSONALITY_PROMPTS.supportive;
@@ -95,6 +108,10 @@ export const generateAIResponse = async (context: ConversationContext): Promise<
 
 export const generateWellnessRecommendation = async (emotions: any): Promise<string> => {
   if (!emotions) return '';
+
+  if (!openai) {
+    return 'Wellness recommendations require OpenAI API configuration.';
+  }
 
   try {
     const completion = await openai.chat.completions.create({
