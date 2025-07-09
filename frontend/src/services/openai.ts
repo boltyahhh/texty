@@ -5,11 +5,14 @@ let openai: OpenAI | null = null;
 
 try {
   const apiKey = import.meta.env.VITE_OPENAI_API_KEY;
-  if (apiKey && apiKey !== 'your_openai_api_key_here') {
+  if (apiKey && apiKey !== 'your_openai_api_key_here' && apiKey.startsWith('sk-')) {
     openai = new OpenAI({
       apiKey,
       dangerouslyAllowBrowser: true // Note: In production, use a backend proxy
     });
+    console.log('OpenAI client initialized successfully');
+  } else {
+    console.warn('OpenAI API key not configured or invalid format');
   }
 } catch (error) {
   console.warn('OpenAI client initialization failed:', error);
